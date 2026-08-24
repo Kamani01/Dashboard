@@ -4,158 +4,329 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="color-scheme" content="light dark" />
   <title>Challenge Dashboard</title>
   <style>
-    :root {
-      --bg: #0b1220;
-      --card: #121a2b;
-      --card2: #182234;
-      --border: #243149;
-      --text: #e8eefc;
-      --muted: #8b9bb8;
-      --good: #22c55e;
-      --bad: #ef4444;
+    /* Theme tokens — dark default, light override via [data-theme] or prefers-color-scheme */
+    :root, [data-theme="dark"] {
+      --bg: #0a0e17;
+      --bg-elevated: #111827;
+      --card: #151c2c;
+      --card-border: rgba(255,255,255,0.06);
+      --text: #f3f6fc;
+      --text-secondary: #a8b3c7;
+      --muted: #7b879c;
+      --good: #10b981;
+      --good-soft: rgba(16,185,129,0.14);
+      --bad: #f43f5e;
+      --bad-soft: rgba(244,63,94,0.14);
       --warn: #f59e0b;
+      --warn-soft: rgba(245,158,11,0.14);
       --accent: #3b82f6;
-      --track: #1e293b;
+      --accent-soft: rgba(59,130,246,0.16);
+      --track: rgba(255,255,255,0.08);
+      --input-bg: #0d1320;
+      --shadow: 0 8px 28px rgba(0,0,0,0.35);
+      --hairline: rgba(255,255,255,0.04);
     }
+    [data-theme="light"] {
+      --bg: #f4f6fa;
+      --bg-elevated: #ffffff;
+      --card: #ffffff;
+      --card-border: rgba(15,23,42,0.08);
+      --text: #0f172a;
+      --text-secondary: #475569;
+      --muted: #64748b;
+      --good: #059669;
+      --good-soft: rgba(5,150,105,0.12);
+      --bad: #e11d48;
+      --bad-soft: rgba(225,29,72,0.10);
+      --warn: #d97706;
+      --warn-soft: rgba(217,119,6,0.12);
+      --accent: #2563eb;
+      --accent-soft: rgba(37,99,235,0.12);
+      --track: rgba(15,23,42,0.08);
+      --input-bg: #f8fafc;
+      --shadow: 0 8px 24px rgba(15,23,42,0.08);
+      --hairline: rgba(15,23,42,0.04);
+    }
+    @media (prefers-color-scheme: light) {
+      :root:not([data-theme="dark"]) {
+        --bg: #f4f6fa;
+        --bg-elevated: #ffffff;
+        --card: #ffffff;
+        --card-border: rgba(15,23,42,0.08);
+        --text: #0f172a;
+        --text-secondary: #475569;
+        --muted: #64748b;
+        --good: #059669;
+        --good-soft: rgba(5,150,105,0.12);
+        --bad: #e11d48;
+        --bad-soft: rgba(225,29,72,0.10);
+        --warn: #d97706;
+        --warn-soft: rgba(217,119,6,0.12);
+        --accent: #2563eb;
+        --accent-soft: rgba(37,99,235,0.12);
+        --track: rgba(15,23,42,0.08);
+        --input-bg: #f8fafc;
+        --shadow: 0 8px 24px rgba(15,23,42,0.08);
+        --hairline: rgba(15,23,42,0.04);
+      }
+    }
+
     * { box-sizing: border-box; }
     html, body {
       margin: 0; min-height: 100%;
       background: var(--bg); color: var(--text);
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      -webkit-font-smoothing: antialiased;
       -webkit-text-size-adjust: 100%;
     }
-    body { padding: 12px; padding-bottom: calc(16px + env(safe-area-inset-bottom)); }
-    h1 { font-size: 18px; margin: 0 0 4px; font-weight: 700; }
-    .sub { color: var(--muted); font-size: 12px; margin-bottom: 12px; }
-    .status {
-      display: inline-flex; align-items: center; gap: 6px;
-      padding: 6px 10px; border-radius: 999px; font-size: 12px; font-weight: 700;
-      background: #1e293b; color: var(--muted); margin-bottom: 12px;
+    body {
+      padding: 14px;
+      padding-bottom: calc(18px + env(safe-area-inset-bottom));
     }
-    .status.ok { background: rgba(34,197,94,.15); color: var(--good); }
-    .status.warn { background: rgba(245,158,11,.15); color: var(--warn); }
-    .status.bad { background: rgba(239,68,68,.15); color: var(--bad); }
-    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+    .shell { max-width: 720px; margin: 0 auto; }
+
+    .hero {
+      display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+      margin-bottom: 14px;
+    }
+    .hero-left { min-width: 0; }
+    .kicker {
+      font-size: 11px; font-weight: 650; letter-spacing: 0.08em; text-transform: uppercase;
+      color: var(--muted); margin-bottom: 4px;
+    }
+    h1 {
+      font-size: 20px; margin: 0; font-weight: 750; letter-spacing: -0.02em; line-height: 1.2;
+    }
+    .sub {
+      color: var(--text-secondary); font-size: 12.5px; margin-top: 4px; line-height: 1.35;
+    }
+    .conn {
+      font-size: 11px; color: var(--muted); margin: 8px 0 0; display: flex; align-items: center; gap: 6px;
+    }
+    .dot {
+      width: 7px; height: 7px; border-radius: 50%; background: var(--muted); flex: 0 0 auto;
+    }
+    .dot.on { background: var(--good); box-shadow: 0 0 0 3px var(--good-soft); }
+    .dot.off { background: var(--warn); box-shadow: 0 0 0 3px var(--warn-soft); }
+
+    .badge {
+      flex: 0 0 auto;
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 7px 11px; border-radius: 999px;
+      font-size: 11px; font-weight: 750; letter-spacing: 0.02em;
+      background: var(--accent-soft); color: var(--accent);
+      border: 1px solid var(--card-border);
+      white-space: nowrap;
+    }
+    .badge.ok { background: var(--good-soft); color: var(--good); }
+    .badge.warn { background: var(--warn-soft); color: var(--warn); }
+    .badge.bad { background: var(--bad-soft); color: var(--bad); }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
     .card {
-      background: linear-gradient(180deg, var(--card), var(--card2));
-      border: 1px solid var(--border); border-radius: 14px; padding: 12px;
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      padding: 14px;
+      box-shadow: var(--shadow);
     }
     .card.wide { grid-column: 1 / -1; }
-    .label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
-    .value { font-size: 20px; font-weight: 700; margin-top: 4px; font-variant-numeric: tabular-nums; }
-    .value.sm { font-size: 16px; }
+    .card.metric { min-height: 78px; }
+
+    .label {
+      color: var(--muted); font-size: 11px; font-weight: 650;
+      text-transform: uppercase; letter-spacing: 0.06em;
+    }
+    .value {
+      font-size: 22px; font-weight: 750; margin-top: 6px;
+      font-variant-numeric: tabular-nums; letter-spacing: -0.02em;
+      line-height: 1.15;
+    }
+    .value.sm { font-size: 16px; font-weight: 700; }
     .pos { color: var(--good); }
     .neg { color: var(--bad); }
-    .bar {
-      height: 10px; background: var(--track); border-radius: 999px; overflow: hidden; margin-top: 10px;
+
+    .progress-head {
+      display: flex; justify-content: space-between; align-items: baseline; gap: 10px;
     }
-    .bar > span { display: block; height: 100%; width: 0%; border-radius: 999px; background: var(--accent); transition: width .35s ease; }
-    .bar.bad > span { background: var(--bad); }
-    .bar.good > span { background: var(--good); }
-    .bar.warn > span { background: var(--warn); }
-    .row { display: flex; justify-content: space-between; gap: 8px; margin-top: 8px; font-size: 12px; color: var(--muted); }
-    details.card { padding: 0; }
+    .progress-head .value.sm { margin-top: 6px; }
+    .pct-pill {
+      font-size: 11px; font-weight: 750; padding: 3px 8px; border-radius: 999px;
+      background: var(--hairline); color: var(--text-secondary); white-space: nowrap;
+    }
+
+    .bar {
+      height: 8px; background: var(--track); border-radius: 999px; overflow: hidden; margin-top: 12px;
+    }
+    .bar > span {
+      display: block; height: 100%; width: 0%; border-radius: 999px;
+      background: linear-gradient(90deg, var(--accent), #60a5fa);
+      transition: width .4s cubic-bezier(.2,.8,.2,1);
+    }
+    .bar.good > span { background: linear-gradient(90deg, #059669, #34d399); }
+    .bar.bad > span { background: linear-gradient(90deg, #e11d48, #fb7185); }
+    .bar.warn > span { background: linear-gradient(90deg, #d97706, #fbbf24); }
+
+    .row {
+      display: flex; justify-content: space-between; gap: 8px;
+      margin-top: 10px; font-size: 12px; color: var(--muted);
+    }
+
+    details.card { padding: 0; margin-top: 10px; }
     details.card > summary {
-      list-style: none; cursor: pointer; padding: 12px; font-weight: 700; font-size: 14px;
+      list-style: none; cursor: pointer; padding: 14px;
+      font-weight: 700; font-size: 13.5px; color: var(--text);
+      display: flex; justify-content: space-between; align-items: center;
     }
     details.card > summary::-webkit-details-marker { display: none; }
-    .settings { padding: 0 12px 12px; display: grid; gap: 8px; }
-    .settings label { display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
+    details.card > summary::after {
+      content: "▾"; color: var(--muted); font-size: 12px;
+    }
+    details.card[open] > summary::after { content: "▴"; }
+    .settings { padding: 0 14px 14px; display: grid; gap: 10px; border-top: 1px solid var(--hairline); padding-top: 12px; }
+    .settings label { display: grid; gap: 6px; font-size: 12px; color: var(--muted); font-weight: 600; }
     .settings input {
-      width: 100%; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border);
-      background: #0f172a; color: var(--text); font-size: 16px;
+      width: 100%; padding: 11px 12px; border-radius: 12px;
+      border: 1px solid var(--card-border); background: var(--input-bg); color: var(--text);
+      font-size: 16px; outline: none;
     }
+    .settings input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+    .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
     .btn {
-      appearance: none; border: 0; border-radius: 10px; padding: 12px;
-      background: var(--accent); color: white; font-weight: 700; font-size: 14px;
+      appearance: none; border: 0; border-radius: 12px; padding: 12px;
+      background: var(--accent); color: #fff; font-weight: 750; font-size: 13.5px;
     }
-    .btn.secondary { background: #334155; }
-    .hint { font-size: 11px; color: var(--muted); line-height: 1.4; margin-top: 10px; }
-    .conn { font-size: 11px; color: var(--muted); margin-bottom: 8px; }
+    .btn.secondary {
+      background: transparent; color: var(--text); border: 1px solid var(--card-border);
+    }
+    .hint { font-size: 11px; color: var(--muted); line-height: 1.45; }
+
+    /* Placement adaptations */
+    body.place-asp_b, body.place-so_eb {
+      padding: 10px;
+    }
+    body.place-asp_b h1, body.place-so_eb h1 { font-size: 16px; }
+    body.place-asp_b .value, body.place-so_eb .value { font-size: 18px; }
+    body.place-asp_b .grid, body.place-so_eb .grid { gap: 8px; }
+    body.place-tw_t .shell { max-width: 980px; }
+    body.place-tw_t .grid { grid-template-columns: repeat(4, 1fr); }
+    body.place-tw_t .card.wide { grid-column: span 2; }
+    @media (max-width: 520px) {
+      body.place-tw_t .grid { grid-template-columns: 1fr 1fr; }
+      body.place-tw_t .card.wide { grid-column: 1 / -1; }
+    }
   </style>
 </head>
 <body>
-  <h1>Challenge Dashboard</h1>
-  <div class="sub">FTMO-style account limits · iPhone / Web / Desktop</div>
-  <div id="conn" class="conn">Connecting to cTrader…</div>
-  <div id="status" class="status">WAITING</div>
-
-  <div class="grid">
-    <div class="card">
-      <div class="label">Balance</div>
-      <div id="balance" class="value">—</div>
-    </div>
-    <div class="card">
-      <div class="label">Equity</div>
-      <div id="equity" class="value">—</div>
+  <div class="shell">
+    <div class="hero">
+      <div class="hero-left">
+        <div class="kicker">Prop challenge</div>
+        <h1>Account Dashboard</h1>
+        <div class="sub">Live equity · daily loss · max DD · profit target</div>
+        <div id="conn" class="conn"><span class="dot off" id="connDot"></span><span id="connText">Connecting…</span></div>
+      </div>
+      <div id="status" class="badge">WAITING</div>
     </div>
 
-    <div class="card wide">
-      <div class="label">Profit target</div>
-      <div id="profitValue" class="value sm">—</div>
-      <div class="bar good"><span id="profitBar"></span></div>
-      <div class="row"><span id="profitLeft">—</span><span id="profitPct">0%</span></div>
-    </div>
+    <div class="grid">
+      <div class="card metric">
+        <div class="label">Balance</div>
+        <div id="balance" class="value">—</div>
+      </div>
+      <div class="card metric">
+        <div class="label">Equity</div>
+        <div id="equity" class="value">—</div>
+      </div>
 
-    <div class="card wide">
-      <div class="label">Daily loss limit</div>
-      <div id="dailyValue" class="value sm">—</div>
-      <div class="bar bad"><span id="dailyBar"></span></div>
-      <div class="row"><span id="dailyLeft">—</span><span id="dailyPct">0%</span></div>
-    </div>
+      <div class="card wide">
+        <div class="progress-head">
+          <div>
+            <div class="label">Profit target</div>
+            <div id="profitValue" class="value sm">—</div>
+          </div>
+          <div id="profitPct" class="pct-pill">0%</div>
+        </div>
+        <div class="bar good"><span id="profitBar"></span></div>
+        <div class="row"><span id="profitLeft">—</span><span>Target</span></div>
+      </div>
 
-    <div class="card wide">
-      <div class="label">Max loss (overall)</div>
-      <div id="maxValue" class="value sm">—</div>
-      <div class="bar warn"><span id="maxBar"></span></div>
-      <div class="row"><span id="maxLeft">—</span><span id="maxPct">0%</span></div>
-    </div>
+      <div class="card wide">
+        <div class="progress-head">
+          <div>
+            <div class="label">Daily loss limit</div>
+            <div id="dailyValue" class="value sm">—</div>
+          </div>
+          <div id="dailyPct" class="pct-pill">0%</div>
+        </div>
+        <div class="bar bad"><span id="dailyBar"></span></div>
+        <div class="row"><span id="dailyLeft">—</span><span>Used today</span></div>
+      </div>
 
-    <div class="card">
-      <div class="label">Today P/L</div>
-      <div id="todayPl" class="value sm">—</div>
-    </div>
-    <div class="card">
-      <div class="label">Floating P/L</div>
-      <div id="floatPl" class="value sm">—</div>
-    </div>
+      <div class="card wide">
+        <div class="progress-head">
+          <div>
+            <div class="label">Max loss</div>
+            <div id="maxValue" class="value sm">—</div>
+          </div>
+          <div id="maxPct" class="pct-pill">0%</div>
+        </div>
+        <div class="bar warn"><span id="maxBar"></span></div>
+        <div class="row"><span id="maxLeft">—</span><span>Drawdown from start</span></div>
+      </div>
 
-    <div class="card">
-      <div class="label">Open positions</div>
-      <div id="openPos" class="value sm">—</div>
-    </div>
-    <div class="card">
-      <div class="label">Free margin</div>
-      <div id="freeMargin" class="value sm">—</div>
-    </div>
-  </div>
-
-  <details class="card wide" style="margin-top:10px">
-    <summary>Challenge settings</summary>
-    <div class="settings">
-      <label>Initial balance
-        <input id="cfgInitial" type="number" inputmode="decimal" step="any" />
-      </label>
-      <label>Profit target %
-        <input id="cfgProfitPct" type="number" inputmode="decimal" step="0.1" />
-      </label>
-      <label>Max daily loss %
-        <input id="cfgDailyPct" type="number" inputmode="decimal" step="0.1" />
-      </label>
-      <label>Max overall loss %
-        <input id="cfgMaxPct" type="number" inputmode="decimal" step="0.1" />
-      </label>
-      <button class="btn" id="btnSave">Save settings</button>
-      <button class="btn secondary" id="btnRefresh">Refresh now</button>
-      <div class="hint">
-        Defaults match common challenge style (e.g. 10% target, 5% daily, 10% max).
-        Host this page over HTTPS, then create a <b>Web plugin</b> in cTrader Algo and enable
-        <b>iOS / Android</b> placements (Trade bottom sheet and/or Symbol Overview).
+      <div class="card metric">
+        <div class="label">Today P/L</div>
+        <div id="todayPl" class="value sm">—</div>
+      </div>
+      <div class="card metric">
+        <div class="label">Floating P/L</div>
+        <div id="floatPl" class="value sm">—</div>
+      </div>
+      <div class="card metric">
+        <div class="label">Open positions</div>
+        <div id="openPos" class="value sm">—</div>
+      </div>
+      <div class="card metric">
+        <div class="label">Free margin</div>
+        <div id="freeMargin" class="value sm">—</div>
       </div>
     </div>
-  </details>
+
+    <details class="card">
+      <summary>Challenge settings</summary>
+      <div class="settings">
+        <label>Initial balance
+          <input id="cfgInitial" type="number" inputmode="decimal" step="any" />
+        </label>
+        <label>Profit target %
+          <input id="cfgProfitPct" type="number" inputmode="decimal" step="0.1" />
+        </label>
+        <label>Max daily loss %
+          <input id="cfgDailyPct" type="number" inputmode="decimal" step="0.1" />
+        </label>
+        <label>Max overall loss %
+          <input id="cfgMaxPct" type="number" inputmode="decimal" step="0.1" />
+        </label>
+        <div class="actions">
+          <button class="btn" id="btnSave">Save</button>
+          <button class="btn secondary" id="btnRefresh">Refresh</button>
+        </div>
+        <div class="hint">
+          Set initial balance to your challenge start size. Limits use common prop-style percentages
+          (editable). Theme follows cTrader light/dark automatically.
+        </div>
+      </div>
+    </details>
+  </div>
 
   <script type="module">
     import { createClientAdapter } from "https://esm.sh/@spotware-web-team/sdk-external-api@0.0.5";
@@ -170,18 +341,25 @@
     import { createLogger } from "https://esm.sh/@veksa/logger@1.0.6";
 
     const $ = (id) => document.getElementById(id);
+
+    // --- Theme + placement from cTrader query string ---
+    const params = new URLSearchParams(location.search);
+    const themeParam = (params.get("theme") || "").toLowerCase();
+    const placement = (params.get("placement") || "").toLowerCase();
+    if (themeParam === "light" || themeParam === "dark") {
+      document.documentElement.setAttribute("data-theme", themeParam);
+    }
+    if (placement) document.body.classList.add(`place-${placement}`);
+
     const money = (n, ccy = "") => {
       if (n == null || Number.isNaN(n)) return "—";
-      const s = (n < 0 ? "-" : "") + Math.abs(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const s = (n < 0 ? "-" : "") + Math.abs(n).toLocaleString(undefined, {
+        minimumFractionDigits: 2, maximumFractionDigits: 2
+      });
       return ccy ? `${s} ${ccy}` : s;
     };
     const clamp01 = (x) => Math.max(0, Math.min(1, x));
-    const setBar = (el, pct, kind) => {
-      el.style.width = `${(clamp01(pct) * 100).toFixed(1)}%`;
-      const bar = el.parentElement;
-      bar.classList.remove("good", "bad", "warn");
-      if (kind) bar.classList.add(kind);
-    };
+    const setBar = (el, pct) => { el.style.width = `${(clamp01(pct) * 100).toFixed(1)}%`; };
     const setPlClass = (el, n) => {
       el.classList.remove("pos", "neg");
       if (n > 0) el.classList.add("pos");
@@ -196,15 +374,10 @@
     };
 
     function loadCfg() {
-      try {
-        return { ...DEFAULTS, ...JSON.parse(localStorage.getItem("ftmoDashCfg") || "{}") };
-      } catch {
-        return { ...DEFAULTS };
-      }
+      try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem("ftmoDashCfg") || "{}") }; }
+      catch { return { ...DEFAULTS }; }
     }
-    function saveCfg(cfg) {
-      localStorage.setItem("ftmoDashCfg", JSON.stringify(cfg));
-    }
+    function saveCfg(cfg) { localStorage.setItem("ftmoDashCfg", JSON.stringify(cfg)); }
 
     let cfg = loadCfg();
     let adapter = null;
@@ -243,18 +416,15 @@
       for (const k of keys) {
         if (obj[k] != null && obj[k] !== "") return Number(obj[k]);
       }
-      // nested payload shapes
       if (obj.payload) return pick(obj.payload, keys, fallback);
       if (obj.account) return pick(obj.account, keys, fallback);
       return fallback;
     }
 
     function extractAccount(res) {
-      // SDK responses vary; normalize common fields.
       const root = res?.payload || res?.account || res || {};
       const balance = pick(root, ["balance", "Balance", "balanceInCents"], NaN);
       const equity = pick(root, ["equity", "Equity", "equityInCents"], NaN);
-      // Some APIs return cents
       const bal = Number.isFinite(balance) && Math.abs(balance) > 1e7 ? balance / 100 : balance;
       const eq = Number.isFinite(equity) && Math.abs(equity) > 1e7 ? equity / 100 : equity;
       currency = root.depositAsset || root.currency || root.Currency || currency || "";
@@ -279,13 +449,15 @@
         const t = Number(d.executionTimestamp || d.utcLastUpdateTimestamp || d.createTimestamp || d.ExecutionTime || 0);
         const ts = t > 1e12 ? t : t * 1000;
         if (ts < from) continue;
-        // closed PnL fields differ by broker/SDK version
-        const pnl = Number(
-          d.closedPnL ?? d.closedPnl ?? d.netProfit ?? d.NetProfit ?? d.pnl ?? d.moneyDigitsPnl ?? 0
-        );
+        const pnl = Number(d.closedPnL ?? d.closedPnl ?? d.netProfit ?? d.NetProfit ?? d.pnl ?? 0);
         if (Number.isFinite(pnl)) sum += Math.abs(pnl) > 1e7 ? pnl / 100 : pnl;
       }
       return sum;
+    }
+
+    function setConn(on, text) {
+      $("connDot").className = "dot " + (on ? "on" : "off");
+      $("connText").textContent = text;
     }
 
     function render() {
@@ -304,13 +476,11 @@
       const equity = a.equity ?? a.balance;
       const balance = a.balance;
       const floating = a.floating ?? (equity - balance);
-      // Approximate "today P/L": closed today + floating (common challenge dashboard approximation)
       const todayPl = todayClosedPl + (floating || 0);
       const overallPl = equity - initial;
 
       $("balance").textContent = money(balance, currency);
       $("equity").textContent = money(equity, currency);
-
       $("todayPl").textContent = money(todayPl, currency);
       setPlClass($("todayPl"), todayPl);
       $("floatPl").textContent = money(floating, currency);
@@ -318,36 +488,33 @@
       $("freeMargin").textContent = money(a.freeMargin, currency);
       $("openPos").textContent = a.openPositions != null ? String(a.openPositions) : "—";
 
-      // Profit target progress (only positive overall counts toward target)
       const profitProgress = clamp01(Math.max(0, overallPl) / Math.max(1e-9, profitTarget));
       $("profitValue").textContent = `${money(Math.max(0, overallPl), currency)} / ${money(profitTarget, currency)}`;
-      setBar($("profitBar"), profitProgress, "good");
-      $("profitLeft").textContent = `Left ${money(Math.max(0, profitTarget - Math.max(0, overallPl)), currency)}`;
+      setBar($("profitBar"), profitProgress);
+      $("profitLeft").textContent = `Remaining ${money(Math.max(0, profitTarget - Math.max(0, overallPl)), currency)}`;
       $("profitPct").textContent = `${(profitProgress * 100).toFixed(1)}%`;
 
-      // Daily loss usage: how much of daily loss allowance is consumed by today's negative P/L
       const dailyUsed = Math.max(0, -todayPl);
       const dailyProgress = clamp01(dailyUsed / Math.max(1e-9, dailyLimit));
-      $("dailyValue").textContent = `${money(dailyUsed, currency)} used / ${money(dailyLimit, currency)}`;
-      setBar($("dailyBar"), dailyProgress, dailyProgress > 0.8 ? "bad" : "warn");
+      $("dailyValue").textContent = `${money(dailyUsed, currency)} / ${money(dailyLimit, currency)}`;
+      setBar($("dailyBar"), dailyProgress);
       $("dailyLeft").textContent = `Remaining ${money(Math.max(0, dailyLimit - dailyUsed), currency)}`;
       $("dailyPct").textContent = `${(dailyProgress * 100).toFixed(1)}%`;
 
-      // Max loss usage from initial
       const maxUsed = Math.max(0, initial - equity);
       const maxProgress = clamp01(maxUsed / Math.max(1e-9, maxLimit));
-      $("maxValue").textContent = `${money(maxUsed, currency)} DD / ${money(maxLimit, currency)}`;
-      setBar($("maxBar"), maxProgress, maxProgress > 0.8 ? "bad" : "warn");
+      $("maxValue").textContent = `${money(maxUsed, currency)} / ${money(maxLimit, currency)}`;
+      setBar($("maxBar"), maxProgress);
       $("maxLeft").textContent = `Buffer ${money(Math.max(0, maxLimit - maxUsed), currency)}`;
       $("maxPct").textContent = `${(maxProgress * 100).toFixed(1)}%`;
 
       const st = $("status");
-      st.className = "status";
+      st.className = "badge";
       if (dailyProgress >= 1 || maxProgress >= 1) {
         st.textContent = "LIMIT BREACHED";
         st.classList.add("bad");
       } else if (profitProgress >= 1) {
-        st.textContent = "PROFIT TARGET HIT";
+        st.textContent = "TARGET HIT";
         st.classList.add("ok");
       } else if (dailyProgress > 0.8 || maxProgress > 0.8) {
         st.textContent = "HIGH RISK";
@@ -356,7 +523,7 @@
         st.textContent = "IN PROGRESS";
         st.classList.add("ok");
       } else {
-        st.textContent = "DISCONNECTED";
+        st.textContent = "PREVIEW";
       }
     }
 
@@ -366,14 +533,14 @@
         take(1),
         tap((res) => {
           lastAccount = extractAccount(res);
-          // open positions if present on payload
           const root = lastAccount.raw || {};
           if (root.openPositionsCount != null) lastAccount.openPositions = Number(root.openPositionsCount);
           if (Array.isArray(root.positions)) lastAccount.openPositions = root.positions.length;
           render();
         }),
         catchError((err) => {
-          $("conn").textContent = "Account read error: " + (err?.message || err);
+          setConn(false, "Account read error");
+          console.warn(err);
           return [];
         })
       ).subscribe();
@@ -388,10 +555,9 @@
       ).subscribe();
     }
 
-    // Connect to cTrader host (works inside WebView plugins on iPhone / Web / Desktop)
     const logger = createLogger(location.href.includes("showLogs"));
     adapter = createClientAdapter({ logger });
-    $("conn").textContent = "Connecting to cTrader host…";
+    setConn(false, "Connecting to cTrader…");
 
     handleConfirmEvent(adapter, {}).pipe(take(1)).subscribe();
     registerEvent(adapter).pipe(
@@ -399,17 +565,14 @@
       tap(() => {
         handleConfirmEvent(adapter, {}).pipe(take(1)).subscribe();
         connected = true;
-        $("conn").textContent = "Connected · live account";
+        setConn(true, "Live account connected");
         refreshAll();
-        // refresh periodically + on executions
         setInterval(refreshAll, 5000);
         executionEvent(adapter).pipe(tap(() => refreshAll())).subscribe();
       }),
       catchError((err) => {
         connected = false;
-        $("conn").textContent =
-          "Not inside cTrader host (open as a Web plugin). Demo numbers shown for layout only.";
-        // Demo layout preview when opened in a normal browser
+        setConn(false, "Preview mode (open inside cTrader plugin)");
         lastAccount = {
           balance: cfg.initialBalance,
           equity: cfg.initialBalance * 1.012,
@@ -424,7 +587,6 @@
       })
     ).subscribe();
 
-    // Optional parent ready handshake used by some plugin hosts
     window.parent?.postMessage?.({ type: "ready" }, "*");
   </script>
 </body>
