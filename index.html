@@ -5,9 +5,8 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="color-scheme" content="light dark" />
-  <title>Challenge Dashboard</title>
+  <title>Last 50 Trades</title>
   <style>
-    /* Theme tokens — dark default, light override via [data-theme] or prefers-color-scheme */
     :root, [data-theme="dark"] {
       --bg: #0a0e17;
       --bg-elevated: #111827;
@@ -165,60 +164,92 @@
 
     .bar {
       height: 8px; background: var(--track); border-radius: 999px; overflow: hidden; margin-top: 12px;
+      display: flex;
     }
     .bar > span {
-      display: block; height: 100%; width: 0%; border-radius: 999px;
-      background: linear-gradient(90deg, var(--accent), #60a5fa);
+      display: block; height: 100%; width: 0%;
       transition: width .4s cubic-bezier(.2,.8,.2,1);
     }
-    .bar.good > span { background: linear-gradient(90deg, #059669, #34d399); }
-    .bar.bad > span { background: linear-gradient(90deg, #e11d48, #fb7185); }
-    .bar.warn > span { background: linear-gradient(90deg, #d97706, #fbbf24); }
+    .bar.winloss { gap: 0; }
+    .bar.winloss .win { background: linear-gradient(90deg, #059669, #34d399); }
+    .bar.winloss .loss { background: linear-gradient(90deg, #e11d48, #fb7185); margin-left: auto; }
 
     .row {
       display: flex; justify-content: space-between; gap: 8px;
       margin-top: 10px; font-size: 12px; color: var(--muted);
     }
 
-    details.card { padding: 0; margin-top: 10px; }
-    details.card > summary {
-      list-style: none; cursor: pointer; padding: 14px;
-      font-weight: 700; font-size: 13.5px; color: var(--text);
-      display: flex; justify-content: space-between; align-items: center;
+    .spark {
+      width: 100%; height: 72px; margin-top: 10px; display: block;
     }
-    details.card > summary::-webkit-details-marker { display: none; }
-    details.card > summary::after {
-      content: "▾"; color: var(--muted); font-size: 12px;
+    .spark-zero { stroke: var(--muted); stroke-dasharray: 3 4; opacity: 0.45; }
+    .spark-line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+    .spark-fill { opacity: 0.16; }
+
+    .chips {
+      display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px;
     }
-    details.card[open] > summary::after { content: "▴"; }
-    .settings { padding: 0 14px 14px; display: grid; gap: 10px; border-top: 1px solid var(--hairline); padding-top: 12px; }
-    .settings label { display: grid; gap: 6px; font-size: 12px; color: var(--muted); font-weight: 600; }
-    .settings input {
-      width: 100%; padding: 11px 12px; border-radius: 12px;
-      border: 1px solid var(--card-border); background: var(--input-bg); color: var(--text);
-      font-size: 16px; outline: none;
+    .chip {
+      appearance: none; border: 1px solid var(--card-border); background: transparent;
+      color: var(--text-secondary); border-radius: 999px; padding: 6px 10px;
+      font-size: 11px; font-weight: 700; cursor: pointer;
     }
-    .settings input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
-    .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .chip.on { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+
+    .trades {
+      margin-top: 8px; display: grid; gap: 0;
+      max-height: min(52vh, 480px); overflow: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    .trade {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px 12px;
+      padding: 11px 2px;
+      border-top: 1px solid var(--hairline);
+    }
+    .trade:first-child { border-top: 0; }
+    .trade-sym {
+      font-weight: 750; font-size: 13.5px; letter-spacing: -0.01em;
+    }
+    .side {
+      display: inline-flex; align-items: center; margin-left: 6px;
+      font-size: 10px; font-weight: 800; letter-spacing: 0.04em;
+      padding: 2px 6px; border-radius: 999px; vertical-align: 1px;
+    }
+    .side.buy { background: var(--good-soft); color: var(--good); }
+    .side.sell { background: var(--bad-soft); color: var(--bad); }
+    .trade-meta {
+      color: var(--muted); font-size: 11.5px; margin-top: 3px;
+      font-variant-numeric: tabular-nums;
+    }
+    .trade-pnl {
+      font-weight: 750; font-size: 14.5px; font-variant-numeric: tabular-nums;
+      text-align: right; align-self: center;
+    }
+    .empty {
+      padding: 18px 4px; color: var(--muted); font-size: 13px; text-align: center;
+    }
+
     .btn {
       appearance: none; border: 0; border-radius: 12px; padding: 12px;
       background: var(--accent); color: #fff; font-weight: 750; font-size: 13.5px;
+      cursor: pointer;
     }
     .btn.secondary {
       background: transparent; color: var(--text); border: 1px solid var(--card-border);
     }
-    .hint { font-size: 11px; color: var(--muted); line-height: 1.45; }
+    .hint { font-size: 11px; color: var(--muted); line-height: 1.45; margin-top: 8px; }
 
-    /* Placement adaptations */
-    body.place-asp_b, body.place-so_eb {
-      padding: 10px;
-    }
+    body.place-asp_b, body.place-so_eb { padding: 10px; }
     body.place-asp_b h1, body.place-so_eb h1 { font-size: 16px; }
     body.place-asp_b .value, body.place-so_eb .value { font-size: 18px; }
     body.place-asp_b .grid, body.place-so_eb .grid { gap: 8px; }
+    body.place-asp_b .trades, body.place-so_eb .trades { max-height: 220px; }
     body.place-tw_t .shell { max-width: 980px; }
     body.place-tw_t .grid { grid-template-columns: repeat(4, 1fr); }
     body.place-tw_t .card.wide { grid-column: span 2; }
+    body.place-tw_t .trades { max-height: 420px; }
     @media (max-width: 520px) {
       body.place-tw_t .grid { grid-template-columns: 1fr 1fr; }
       body.place-tw_t .card.wide { grid-column: 1 / -1; }
@@ -229,9 +260,9 @@
   <div class="shell">
     <div class="hero">
       <div class="hero-left">
-        <div class="kicker">Prop challenge</div>
-        <h1>Account Dashboard</h1>
-        <div class="sub">Live equity · daily loss · max DD · profit target</div>
+        <div class="kicker">Closed history</div>
+        <h1>Last 50 trades</h1>
+        <div class="sub">Net P/L · win rate · profit factor · deal list</div>
         <div id="conn" class="conn"><span class="dot off" id="connDot"></span><span id="connText">Connecting…</span></div>
       </div>
       <div id="status" class="badge">WAITING</div>
@@ -247,45 +278,61 @@
         <div id="equity" class="value">—</div>
       </div>
 
-      <div class="card wide">
-        <div class="progress-head">
-          <div>
-            <div class="label">Profit target</div>
-            <div id="profitValue" class="value sm">—</div>
-          </div>
-          <div id="profitPct" class="pct-pill">0%</div>
-        </div>
-        <div class="bar good"><span id="profitBar"></span></div>
-        <div class="row"><span id="profitLeft">—</span><span>Target</span></div>
+      <div class="card metric">
+        <div class="label">Net P/L</div>
+        <div id="netPl" class="value">—</div>
+      </div>
+      <div class="card metric">
+        <div class="label">Expectancy</div>
+        <div id="expectancy" class="value sm">—</div>
       </div>
 
       <div class="card wide">
         <div class="progress-head">
           <div>
-            <div class="label">Daily loss limit</div>
-            <div id="dailyValue" class="value sm">—</div>
+            <div class="label">Win rate</div>
+            <div id="winValue" class="value sm">—</div>
           </div>
-          <div id="dailyPct" class="pct-pill">0%</div>
+          <div id="winPct" class="pct-pill">0%</div>
         </div>
-        <div class="bar bad"><span id="dailyBar"></span></div>
-        <div class="row"><span id="dailyLeft">—</span><span>Used today</span></div>
+        <div class="bar winloss"><span class="win" id="winBar"></span><span class="loss" id="lossBar"></span></div>
+        <div class="row"><span id="winLeft">—</span><span id="sampleNote">Last 50 closing deals</span></div>
       </div>
 
       <div class="card wide">
         <div class="progress-head">
           <div>
-            <div class="label">Max loss</div>
-            <div id="maxValue" class="value sm">—</div>
+            <div class="label">Equity curve (this sample)</div>
+            <div id="curveCaption" class="value sm">—</div>
           </div>
-          <div id="maxPct" class="pct-pill">0%</div>
+          <div id="streak" class="pct-pill">Streak —</div>
         </div>
-        <div class="bar warn"><span id="maxBar"></span></div>
-        <div class="row"><span id="maxLeft">—</span><span>Drawdown from start</span></div>
+        <svg id="spark" class="spark" viewBox="0 0 320 72" preserveAspectRatio="none" aria-hidden="true"></svg>
       </div>
 
       <div class="card metric">
-        <div class="label">Today P/L</div>
-        <div id="todayPl" class="value sm">—</div>
+        <div class="label">Profit factor</div>
+        <div id="pf" class="value sm">—</div>
+      </div>
+      <div class="card metric">
+        <div class="label">Avg win / loss</div>
+        <div id="avgWl" class="value sm">—</div>
+      </div>
+      <div class="card metric">
+        <div class="label">Best trade</div>
+        <div id="best" class="value sm">—</div>
+      </div>
+      <div class="card metric">
+        <div class="label">Worst trade</div>
+        <div id="worst" class="value sm">—</div>
+      </div>
+      <div class="card metric">
+        <div class="label">Long P/L</div>
+        <div id="longPl" class="value sm">—</div>
+      </div>
+      <div class="card metric">
+        <div class="label">Short P/L</div>
+        <div id="shortPl" class="value sm">—</div>
       </div>
       <div class="card metric">
         <div class="label">Floating P/L</div>
@@ -295,37 +342,29 @@
         <div class="label">Open positions</div>
         <div id="openPos" class="value sm">—</div>
       </div>
-      <div class="card metric">
-        <div class="label">Free margin</div>
-        <div id="freeMargin" class="value sm">—</div>
+
+      <div class="card wide">
+        <div class="progress-head">
+          <div>
+            <div class="label">Trade list</div>
+            <div id="listCaption" class="value sm">Newest first</div>
+          </div>
+          <button class="btn secondary" id="btnRefresh" type="button" style="padding:8px 12px;font-size:12px">Refresh</button>
+        </div>
+        <div class="chips" id="chips">
+          <button class="chip on" data-filter="all" type="button">All</button>
+          <button class="chip" data-filter="win" type="button">Wins</button>
+          <button class="chip" data-filter="loss" type="button">Losses</button>
+          <button class="chip" data-filter="buy" type="button">Buys</button>
+          <button class="chip" data-filter="sell" type="button">Sells</button>
+        </div>
+        <div class="trades" id="trades"></div>
+        <div class="hint">
+          Uses cTrader closing deals (including partial closes). If the account has fewer than 50,
+          the sample is whatever is available.
+        </div>
       </div>
     </div>
-
-    <details class="card">
-      <summary>Challenge settings</summary>
-      <div class="settings">
-        <label>Initial balance
-          <input id="cfgInitial" type="number" inputmode="decimal" step="any" />
-        </label>
-        <label>Profit target %
-          <input id="cfgProfitPct" type="number" inputmode="decimal" step="0.1" />
-        </label>
-        <label>Max daily loss %
-          <input id="cfgDailyPct" type="number" inputmode="decimal" step="0.1" />
-        </label>
-        <label>Max overall loss %
-          <input id="cfgMaxPct" type="number" inputmode="decimal" step="0.1" />
-        </label>
-        <div class="actions">
-          <button class="btn" id="btnSave">Save</button>
-          <button class="btn secondary" id="btnRefresh">Refresh</button>
-        </div>
-        <div class="hint">
-          Set initial balance to your challenge start size. Limits use common prop-style percentages
-          (editable). Theme follows cTrader light/dark automatically.
-        </div>
-      </div>
-    </details>
   </div>
 
   <script type="module">
@@ -333,6 +372,7 @@
     import {
       getAccountInformation,
       getDealList,
+      getLightSymbolList,
       executionEvent,
       handleConfirmEvent,
       registerEvent,
@@ -340,9 +380,10 @@
     import { take, tap, catchError } from "https://esm.sh/rxjs@7.8.2";
     import { createLogger } from "https://esm.sh/@veksa/logger@1.0.6";
 
+    const TRADE_LIMIT = 50;
+    const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
     const $ = (id) => document.getElementById(id);
 
-    // --- Theme + placement from cTrader query string ---
     const params = new URLSearchParams(location.search);
     const themeParam = (params.get("theme") || "").toLowerCase();
     const placement = (params.get("placement") || "").toLowerCase();
@@ -358,58 +399,67 @@
       });
       return ccy ? `${s} ${ccy}` : s;
     };
-    const clamp01 = (x) => Math.max(0, Math.min(1, x));
-    const setBar = (el, pct) => { el.style.width = `${(clamp01(pct) * 100).toFixed(1)}%`; };
     const setPlClass = (el, n) => {
       el.classList.remove("pos", "neg");
       if (n > 0) el.classList.add("pos");
       if (n < 0) el.classList.add("neg");
     };
+    const once = (obs) => new Promise((resolve, reject) => {
+      obs.pipe(take(1)).subscribe({ next: resolve, error: reject });
+    });
 
-    const DEFAULTS = {
-      initialBalance: 100000,
-      profitTargetPct: 10,
-      dailyLossPct: 5,
-      maxLossPct: 10,
-    };
-
-    function loadCfg() {
-      try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem("ftmoDashCfg") || "{}") }; }
-      catch { return { ...DEFAULTS }; }
+    function moneyInt(val, digits) {
+      const n = Number(val);
+      if (!Number.isFinite(n)) return 0;
+      const d = Number(digits);
+      if (Number.isFinite(d) && d > 0 && d <= 12) return n / (10 ** d);
+      if (Math.abs(n) >= 1e8) return n / 1e8;
+      if (Math.abs(n) >= 1e5) return n / 100;
+      return n;
     }
-    function saveCfg(cfg) { localStorage.setItem("ftmoDashCfg", JSON.stringify(cfg)); }
 
-    let cfg = loadCfg();
+    function asMs(t) {
+      const n = Number(t || 0);
+      if (!Number.isFinite(n) || n <= 0) return 0;
+      return n > 1e12 ? n : n * 1000;
+    }
+
+    function sideOf(raw) {
+      if (raw == null) return "BUY";
+      const s = String(raw).toUpperCase();
+      if (s === "2" || s.includes("SELL")) return "SELL";
+      if (s === "1" || s.includes("BUY")) return "BUY";
+      return Number(raw) === 2 ? "SELL" : "BUY";
+    }
+
+    function lotsOf(deal, close) {
+      const vol = Number(close?.closedVolume ?? deal.filledVolume ?? deal.volume ?? 0);
+      const lot = Number(deal.lotSize || 0);
+      if (lot > 0) return vol / lot;
+      return vol / 10_000_000;
+    }
+
+    function fmtLots(n) {
+      if (!Number.isFinite(n)) return "—";
+      return n >= 10 ? n.toFixed(2) : n.toFixed(3);
+    }
+
+    function fmtTime(ms) {
+      if (!ms) return "";
+      const d = new Date(ms);
+      return d.toLocaleString(undefined, {
+        month: "short", day: "numeric", hour: "2-digit", minute: "2-digit"
+      });
+    }
+
     let adapter = null;
     let connected = false;
     let currency = "";
     let lastAccount = null;
-    let todayClosedPl = 0;
-
-    function fillSettings() {
-      $("cfgInitial").value = cfg.initialBalance;
-      $("cfgProfitPct").value = cfg.profitTargetPct;
-      $("cfgDailyPct").value = cfg.dailyLossPct;
-      $("cfgMaxPct").value = cfg.maxLossPct;
-    }
-    fillSettings();
-
-    $("btnSave").onclick = () => {
-      cfg = {
-        initialBalance: Number($("cfgInitial").value) || DEFAULTS.initialBalance,
-        profitTargetPct: Number($("cfgProfitPct").value) || DEFAULTS.profitTargetPct,
-        dailyLossPct: Number($("cfgDailyPct").value) || DEFAULTS.dailyLossPct,
-        maxLossPct: Number($("cfgMaxPct").value) || DEFAULTS.maxLossPct,
-      };
-      saveCfg(cfg);
-      render();
-    };
-    $("btnRefresh").onclick = () => refreshAll();
-
-    function startOfUtcDayMs() {
-      const d = new Date();
-      return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
-    }
+    let symbolNames = new Map();
+    let trades = [];
+    let listFilter = "all";
+    let loadingDeals = false;
 
     function pick(obj, keys, fallback = 0) {
       if (!obj) return fallback;
@@ -425,11 +475,14 @@
       const root = res?.payload || res?.account || res || {};
       const balance = pick(root, ["balance", "Balance", "balanceInCents"], NaN);
       const equity = pick(root, ["equity", "Equity", "equityInCents"], NaN);
-      const bal = Number.isFinite(balance) && Math.abs(balance) > 1e7 ? balance / 100 : balance;
-      const eq = Number.isFinite(equity) && Math.abs(equity) > 1e7 ? equity / 100 : equity;
+      const digits = Number(root.moneyDigits ?? root.MoneyDigits ?? 2);
+      const balRaw = Number(balance);
+      const eqRaw = Number(equity);
+      const bal = Number.isFinite(balRaw) ? (Math.abs(balRaw) > 1e7 ? moneyInt(balRaw, digits > 2 ? digits : 2) : balRaw) : NaN;
+      const eq = Number.isFinite(eqRaw) ? (Math.abs(eqRaw) > 1e7 ? moneyInt(eqRaw, digits > 2 ? digits : 2) : eqRaw) : NaN;
       currency = root.depositAsset || root.currency || root.Currency || currency || "";
       const freeMargin = pick(root, ["freeMargin", "FreeMargin", "freeMarginInCents"], NaN);
-      const fm = Number.isFinite(freeMargin) && Math.abs(freeMargin) > 1e7 ? freeMargin / 100 : freeMargin;
+      const fm = Number.isFinite(freeMargin) && Math.abs(freeMargin) > 1e7 ? moneyInt(freeMargin, digits) : freeMargin;
       const unrealized = pick(root, ["unrealizedNetProfit", "UnrealizedNetProfit", "netUnrealizedPnL"], NaN);
       return {
         balance: Number.isFinite(bal) ? bal : null,
@@ -440,19 +493,217 @@
       };
     }
 
-    function sumTodayDeals(res) {
-      const list = res?.deal || res?.deals || res?.payload?.deal || res?.payload?.deals || [];
-      if (!Array.isArray(list)) return 0;
-      const from = startOfUtcDayMs();
-      let sum = 0;
-      for (const d of list) {
-        const t = Number(d.executionTimestamp || d.utcLastUpdateTimestamp || d.createTimestamp || d.ExecutionTime || 0);
-        const ts = t > 1e12 ? t : t * 1000;
-        if (ts < from) continue;
-        const pnl = Number(d.closedPnL ?? d.closedPnl ?? d.netProfit ?? d.NetProfit ?? d.pnl ?? 0);
-        if (Number.isFinite(pnl)) sum += Math.abs(pnl) > 1e7 ? pnl / 100 : pnl;
+    function extractArray(res, keys) {
+      const roots = [res, res?.payload, res?.result, res?.data];
+      for (const root of roots) {
+        if (!root) continue;
+        for (const k of keys) {
+          if (Array.isArray(root[k])) return root[k];
+        }
       }
-      return sum;
+      return [];
+    }
+
+    function ingestSymbols(res) {
+      const list = extractArray(res, ["symbol", "symbols", "lightSymbol", "lightSymbols"]);
+      for (const s of list) {
+        const id = s.id ?? s.symbolId ?? s.Id;
+        const name = s.name ?? s.Name ?? s.symbolName;
+        if (id != null && name) symbolNames.set(Number(id), String(name));
+      }
+    }
+
+    function parseClosingDeal(d) {
+      const close = d.closePositionDetail || d.ClosePositionDetail || null;
+      if (!close) return null;
+      const digits = close.moneyDigits ?? d.moneyDigits ?? close.MoneyDigits ?? d.MoneyDigits ?? 2;
+      const gross = moneyInt(close.profit ?? close.grossProfit ?? close.Profit ?? 0, digits);
+      const swap = moneyInt(close.swap ?? close.Swap ?? 0, digits);
+      const commission = moneyInt(close.commission ?? close.Commission ?? d.commission ?? 0, digits);
+      const conv = moneyInt(close.pnlConversionFee ?? close.PnlConversionFee ?? 0, digits);
+      const net = gross + swap + commission + conv;
+      const ts = asMs(d.executionTimestamp || d.utcLastUpdateTimestamp || d.createTimestamp);
+      const offsets = d.offsetDeals || d.offsetDeal || [];
+      let openTs = 0;
+      if (Array.isArray(offsets)) {
+        for (const o of offsets) {
+          const t = asMs(o.executionTimestamp);
+          if (t && (!openTs || t < openTs)) openTs = t;
+        }
+      }
+      const symbolId = Number(d.symbolId ?? d.SymbolId ?? 0);
+      return {
+        id: d.dealId ?? d.DealId ?? `${symbolId}-${ts}`,
+        positionId: d.positionId ?? d.PositionId,
+        symbolId,
+        symbol: symbolNames.get(symbolId) || (symbolId ? `#${symbolId}` : "—"),
+        side: sideOf(d.tradeSide ?? d.TradeSide),
+        lots: lotsOf(d, close),
+        entry: Number(close.entryPrice ?? close.EntryPrice ?? 0),
+        exit: Number(d.executionPrice ?? d.ExecutionPrice ?? 0),
+        net,
+        gross,
+        ts,
+        openTs,
+      };
+    }
+
+    function extractTrades(res) {
+      const list = extractArray(res, ["deal", "deals", "Deal"]);
+      const out = [];
+      for (const d of list) {
+        const t = parseClosingDeal(d);
+        if (t) out.push(t);
+      }
+      return out;
+    }
+
+    async function loadDealHistory() {
+      const collected = [];
+      const seen = new Set();
+      const add = (batch) => {
+        for (const t of batch) {
+          const key = String(t.id);
+          if (seen.has(key)) continue;
+          seen.add(key);
+          collected.push(t);
+        }
+      };
+
+      try {
+        const res = await once(getDealList(adapter, { fromTimestamp: 0, toTimestamp: Date.now() }));
+        add(extractTrades(res));
+        if (collected.length >= TRADE_LIMIT) return collected;
+      } catch (err) {
+        console.warn("wide deal list failed", err);
+      }
+
+      let to = Date.now();
+      for (let i = 0; i < 52 && collected.length < TRADE_LIMIT * 2; i++) {
+        const from = to - WEEK_MS;
+        try {
+          const res = await once(getDealList(adapter, { fromTimestamp: from, toTimestamp: to }));
+          add(extractTrades(res));
+        } catch (err) {
+          console.warn("weekly deal list failed", err);
+          break;
+        }
+        to = from;
+      }
+      return collected;
+    }
+
+    function statsOf(rows) {
+      const n = rows.length;
+      let net = 0, wins = 0, losses = 0, even = 0;
+      let winSum = 0, lossSum = 0;
+      let best = null, worst = null;
+      let longPl = 0, shortPl = 0;
+      for (const t of rows) {
+        net += t.net;
+        if (t.net > 0) { wins++; winSum += t.net; }
+        else if (t.net < 0) { losses++; lossSum += t.net; }
+        else even++;
+        if (best == null || t.net > best.net) best = t;
+        if (worst == null || t.net < worst.net) worst = t;
+        if (t.side === "BUY") longPl += t.net;
+        else shortPl += t.net;
+      }
+      let streak = 0, streakKind = "flat";
+      if (n) {
+        streakKind = rows[0].net > 0 ? "win" : rows[0].net < 0 ? "loss" : "flat";
+        for (const t of rows) {
+          const kind = t.net > 0 ? "win" : t.net < 0 ? "loss" : "flat";
+          if (kind !== streakKind) break;
+          streak++;
+        }
+      }
+      const pf = lossSum < 0 ? winSum / Math.abs(lossSum) : (winSum > 0 ? Infinity : 0);
+      return {
+        n, net, wins, losses, even,
+        winRate: n ? wins / n : 0,
+        avgWin: wins ? winSum / wins : 0,
+        avgLoss: losses ? lossSum / losses : 0,
+        pf, best, worst, longPl, shortPl, streak, streakKind,
+        expectancy: n ? net / n : 0,
+      };
+    }
+
+    function sparkPath(rows) {
+      const svg = $("spark");
+      const W = 320, H = 72, pad = 4;
+      if (!rows.length) {
+        svg.innerHTML = "";
+        return;
+      }
+      const chrono = [...rows].reverse();
+      let run = 0;
+      const pts = chrono.map((t) => { run += t.net; return run; });
+      const min = Math.min(0, ...pts);
+      const max = Math.max(0, ...pts);
+      const span = max - min || 1;
+      const x = (i) => pad + (i / Math.max(1, pts.length - 1)) * (W - pad * 2);
+      const y = (v) => H - pad - ((v - min) / span) * (H - pad * 2);
+      const zeroY = y(0);
+      const d = pts.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+      const fill = `${d} L${x(pts.length - 1).toFixed(1)},${zeroY.toFixed(1)} L${x(0).toFixed(1)},${zeroY.toFixed(1)} Z`;
+      const up = pts[pts.length - 1] >= 0;
+      const color = up ? "var(--good)" : "var(--bad)";
+      svg.innerHTML =
+        `<line class="spark-zero" x1="${pad}" x2="${W - pad}" y1="${zeroY.toFixed(1)}" y2="${zeroY.toFixed(1)}" />` +
+        `<path class="spark-fill" d="${fill}" fill="${color}"></path>` +
+        `<path class="spark-line" d="${d}" stroke="${color}"></path>`;
+    }
+
+    function filteredTrades() {
+      return trades.filter((t) => {
+        if (listFilter === "win") return t.net > 0;
+        if (listFilter === "loss") return t.net < 0;
+        if (listFilter === "buy") return t.side === "BUY";
+        if (listFilter === "sell") return t.side === "SELL";
+        return true;
+      });
+    }
+
+    function renderList() {
+      const rows = filteredTrades();
+      const host = $("trades");
+      if (!rows.length) {
+        host.innerHTML = `<div class="empty">${trades.length ? "Nothing in this filter." : "No closing deals in range yet."}</div>`;
+        return;
+      }
+      host.innerHTML = rows.map((t) => {
+        const dur = t.openTs && t.ts > t.openTs ? formatDur(t.ts - t.openTs) : "";
+        const px = (t.entry && t.exit)
+          ? `${t.entry.toPrecision(6)} → ${t.exit.toPrecision(6)}`
+          : "";
+        const bits = [`${fmtLots(t.lots)} lot`, px, dur, fmtTime(t.ts)].filter(Boolean);
+        const cls = t.net > 0 ? "pos" : t.net < 0 ? "neg" : "";
+        return `<div class="trade">
+          <div>
+            <div class="trade-sym">${escapeHtml(t.symbol)}<span class="side ${t.side.toLowerCase()}">${t.side}</span></div>
+            <div class="trade-meta">${escapeHtml(bits.join(" · "))}</div>
+          </div>
+          <div class="trade-pnl ${cls}">${t.net > 0 ? "+" : ""}${money(t.net, currency)}</div>
+        </div>`;
+      }).join("");
+    }
+
+    function formatDur(ms) {
+      const s = Math.round(ms / 1000);
+      if (s < 60) return `${s}s`;
+      const m = Math.round(s / 60);
+      if (m < 60) return `${m}m`;
+      const h = Math.floor(m / 60);
+      const rm = m % 60;
+      if (h < 48) return rm ? `${h}h ${rm}m` : `${h}h`;
+      return `${Math.round(h / 24)}d`;
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, (c) => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+      }[c]));
     }
 
     function setConn(on, text) {
@@ -462,98 +713,139 @@
 
     function render() {
       const a = lastAccount;
-      if (!a || a.balance == null) {
-        $("balance").textContent = "—";
-        $("equity").textContent = "—";
-        return;
+      if (a && a.balance != null) {
+        $("balance").textContent = money(a.balance, currency);
+        $("equity").textContent = money(a.equity ?? a.balance, currency);
+        const floating = a.floating ?? ((a.equity ?? a.balance) - a.balance);
+        $("floatPl").textContent = money(floating, currency);
+        setPlClass($("floatPl"), floating);
+        $("openPos").textContent = a.openPositions != null ? String(a.openPositions) : "—";
       }
 
-      const initial = cfg.initialBalance;
-      const profitTarget = initial * (cfg.profitTargetPct / 100);
-      const dailyLimit = initial * (cfg.dailyLossPct / 100);
-      const maxLimit = initial * (cfg.maxLossPct / 100);
+      const s = statsOf(trades);
+      $("netPl").textContent = money(s.net, currency);
+      setPlClass($("netPl"), s.net);
+      $("expectancy").textContent = money(s.expectancy, currency);
+      setPlClass($("expectancy"), s.expectancy);
 
-      const equity = a.equity ?? a.balance;
-      const balance = a.balance;
-      const floating = a.floating ?? (equity - balance);
-      const todayPl = todayClosedPl + (floating || 0);
-      const overallPl = equity - initial;
+      $("winValue").textContent = s.n ? `${s.wins}W · ${s.losses}L${s.even ? ` · ${s.even}E` : ""}` : "—";
+      $("winPct").textContent = s.n ? `${(s.winRate * 100).toFixed(0)}%` : "0%";
+      $("winBar").style.width = `${(s.winRate * 100).toFixed(1)}%`;
+      $("lossBar").style.width = s.n ? `${((s.losses / s.n) * 100).toFixed(1)}%` : "0%";
+      $("winLeft").textContent = s.n ? `${s.n} of last ${TRADE_LIMIT}` : "No trades yet";
+      $("sampleNote").textContent = s.n < TRADE_LIMIT ? `Showing ${s.n} available` : `Last ${TRADE_LIMIT} closing deals`;
 
-      $("balance").textContent = money(balance, currency);
-      $("equity").textContent = money(equity, currency);
-      $("todayPl").textContent = money(todayPl, currency);
-      setPlClass($("todayPl"), todayPl);
-      $("floatPl").textContent = money(floating, currency);
-      setPlClass($("floatPl"), floating);
-      $("freeMargin").textContent = money(a.freeMargin, currency);
-      $("openPos").textContent = a.openPositions != null ? String(a.openPositions) : "—";
+      $("curveCaption").textContent = s.n ? money(s.net, currency) : "—";
+      setPlClass($("curveCaption"), s.net);
+      $("streak").textContent = s.n
+        ? (s.streakKind === "win" ? `${s.streak} win streak` : s.streakKind === "loss" ? `${s.streak} loss streak` : "Flat")
+        : "Streak —";
 
-      const profitProgress = clamp01(Math.max(0, overallPl) / Math.max(1e-9, profitTarget));
-      $("profitValue").textContent = `${money(Math.max(0, overallPl), currency)} / ${money(profitTarget, currency)}`;
-      setBar($("profitBar"), profitProgress);
-      $("profitLeft").textContent = `Remaining ${money(Math.max(0, profitTarget - Math.max(0, overallPl)), currency)}`;
-      $("profitPct").textContent = `${(profitProgress * 100).toFixed(1)}%`;
+      $("pf").textContent = !s.n ? "—" : !Number.isFinite(s.pf) ? "∞" : s.pf.toFixed(2);
+      $("avgWl").textContent = s.n ? `${money(s.avgWin, currency)} / ${money(s.avgLoss, currency)}` : "—";
+      $("best").textContent = s.best ? money(s.best.net, currency) : "—";
+      setPlClass($("best"), s.best?.net ?? 0);
+      $("worst").textContent = s.worst ? money(s.worst.net, currency) : "—";
+      setPlClass($("worst"), s.worst?.net ?? 0);
+      $("longPl").textContent = money(s.longPl, currency);
+      setPlClass($("longPl"), s.longPl);
+      $("shortPl").textContent = money(s.shortPl, currency);
+      setPlClass($("shortPl"), s.shortPl);
 
-      const dailyUsed = Math.max(0, -todayPl);
-      const dailyProgress = clamp01(dailyUsed / Math.max(1e-9, dailyLimit));
-      $("dailyValue").textContent = `${money(dailyUsed, currency)} / ${money(dailyLimit, currency)}`;
-      setBar($("dailyBar"), dailyProgress);
-      $("dailyLeft").textContent = `Remaining ${money(Math.max(0, dailyLimit - dailyUsed), currency)}`;
-      $("dailyPct").textContent = `${(dailyProgress * 100).toFixed(1)}%`;
-
-      const maxUsed = Math.max(0, initial - equity);
-      const maxProgress = clamp01(maxUsed / Math.max(1e-9, maxLimit));
-      $("maxValue").textContent = `${money(maxUsed, currency)} / ${money(maxLimit, currency)}`;
-      setBar($("maxBar"), maxProgress);
-      $("maxLeft").textContent = `Buffer ${money(Math.max(0, maxLimit - maxUsed), currency)}`;
-      $("maxPct").textContent = `${(maxProgress * 100).toFixed(1)}%`;
+      sparkPath(trades);
+      $("listCaption").textContent = `${filteredTrades().length} shown`;
+      renderList();
 
       const st = $("status");
       st.className = "badge";
-      if (dailyProgress >= 1 || maxProgress >= 1) {
-        st.textContent = "LIMIT BREACHED";
+      if (!s.n) {
+        st.textContent = connected ? "NO TRADES" : "PREVIEW";
+      } else if (s.net > 0 && s.winRate >= 0.5) {
+        st.textContent = "NET POSITIVE";
+        st.classList.add("ok");
+      } else if (s.net > 0) {
+        st.textContent = "AHEAD";
+        st.classList.add("ok");
+      } else if (s.net < 0) {
+        st.textContent = "NET NEGATIVE";
         st.classList.add("bad");
-      } else if (profitProgress >= 1) {
-        st.textContent = "TARGET HIT";
-        st.classList.add("ok");
-      } else if (dailyProgress > 0.8 || maxProgress > 0.8) {
-        st.textContent = "HIGH RISK";
-        st.classList.add("warn");
-      } else if (connected) {
-        st.textContent = "IN PROGRESS";
-        st.classList.add("ok");
       } else {
-        st.textContent = "PREVIEW";
+        st.textContent = "FLAT";
+        st.classList.add("warn");
       }
     }
 
-    function refreshAll() {
-      if (!adapter || !connected) return;
-      getAccountInformation(adapter, {}).pipe(
-        take(1),
-        tap((res) => {
-          lastAccount = extractAccount(res);
-          const root = lastAccount.raw || {};
-          if (root.openPositionsCount != null) lastAccount.openPositions = Number(root.openPositionsCount);
-          if (Array.isArray(root.positions)) lastAccount.openPositions = root.positions.length;
-          render();
-        }),
-        catchError((err) => {
-          setConn(false, "Account read error");
-          console.warn(err);
-          return [];
-        })
-      ).subscribe();
-
-      getDealList(adapter, { fromTimestamp: startOfUtcDayMs(), toTimestamp: Date.now() }).pipe(
-        take(1),
-        tap((res) => {
-          todayClosedPl = sumTodayDeals(res);
-          render();
-        }),
-        catchError(() => [])
-      ).subscribe();
+    function demoTrades() {
+      const symbols = ["EURUSD", "GBPUSD", "XAUUSD", "USDJPY", "US500"];
+      const out = [];
+      let t = Date.now() - 40 * 86400000;
+      for (let i = 0; i < TRADE_LIMIT; i++) {
+        t += (12 + Math.round(Math.random() * 30)) * 3600000;
+        const side = Math.random() > 0.46 ? "BUY" : "SELL";
+        const win = Math.random() > 0.42;
+        const mag = win ? 40 + Math.random() * 180 : -(25 + Math.random() * 140);
+        out.push({
+          id: `demo-${i}`,
+          symbol: symbols[i % symbols.length],
+          side,
+          lots: 0.1 + (i % 5) * 0.1,
+          entry: 1.08 + Math.random() * 0.02,
+          exit: 1.08 + Math.random() * 0.02,
+          net: Math.round(mag * 100) / 100,
+          ts: t,
+          openTs: t - (20 + Math.random() * 240) * 60000,
+        });
+      }
+      return out.reverse();
     }
+
+    async function refreshAccount() {
+      if (!adapter || !connected) return;
+      try {
+        const res = await once(getAccountInformation(adapter, {}));
+        lastAccount = extractAccount(res);
+        const root = lastAccount.raw || {};
+        if (root.openPositionsCount != null) lastAccount.openPositions = Number(root.openPositionsCount);
+        if (Array.isArray(root.positions)) lastAccount.openPositions = root.positions.length;
+        render();
+      } catch (err) {
+        setConn(false, "Account read error");
+        console.warn(err);
+      }
+    }
+
+    async function refreshDeals() {
+      if (!adapter || !connected || loadingDeals) return;
+      loadingDeals = true;
+      try {
+        const all = await loadDealHistory();
+        all.sort((a, b) => b.ts - a.ts);
+        trades = all.slice(0, TRADE_LIMIT);
+        for (const t of trades) {
+          if (symbolNames.has(t.symbolId)) t.symbol = symbolNames.get(t.symbolId);
+        }
+        render();
+      } catch (err) {
+        console.warn(err);
+      } finally {
+        loadingDeals = false;
+      }
+    }
+
+    async function refreshAll() {
+      if (!adapter || !connected) return;
+      await refreshAccount();
+      await refreshDeals();
+    }
+
+    $("btnRefresh").onclick = () => refreshAll();
+    $("chips").onclick = (ev) => {
+      const btn = ev.target.closest("[data-filter]");
+      if (!btn) return;
+      listFilter = btn.getAttribute("data-filter");
+      for (const c of $("chips").querySelectorAll(".chip")) c.classList.toggle("on", c === btn);
+      render();
+    };
 
     const logger = createLogger(location.href.includes("showLogs"));
     adapter = createClientAdapter({ logger });
@@ -562,25 +854,32 @@
     handleConfirmEvent(adapter, {}).pipe(take(1)).subscribe();
     registerEvent(adapter).pipe(
       take(1),
-      tap(() => {
+      tap(async () => {
         handleConfirmEvent(adapter, {}).pipe(take(1)).subscribe();
         connected = true;
         setConn(true, "Live account connected");
-        refreshAll();
-        setInterval(refreshAll, 5000);
+        try {
+          const sym = await once(getLightSymbolList(adapter, { includeArchivedSymbols: true }));
+          ingestSymbols(sym);
+        } catch (err) {
+          console.warn(err);
+        }
+        await refreshAll();
+        setInterval(refreshAccount, 5000);
+        setInterval(refreshDeals, 20000);
         executionEvent(adapter).pipe(tap(() => refreshAll())).subscribe();
       }),
       catchError((err) => {
         connected = false;
         setConn(false, "Preview mode (open inside cTrader plugin)");
         lastAccount = {
-          balance: cfg.initialBalance,
-          equity: cfg.initialBalance * 1.012,
-          freeMargin: cfg.initialBalance * 0.9,
-          floating: cfg.initialBalance * 0.004,
-          openPositions: 1,
+          balance: 100000,
+          equity: 101240,
+          floating: 180,
+          openPositions: 2,
         };
-        todayClosedPl = cfg.initialBalance * 0.008;
+        currency = "USD";
+        trades = demoTrades();
         render();
         console.warn(err);
         return [];
