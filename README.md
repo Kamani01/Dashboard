@@ -13,3 +13,8 @@ https://kamani01.github.io/Dashboard/
 - Filterable deal list (all / wins / losses / buys / sells)
 
 Open `index.html` in a browser for a 50-trade preview when not inside cTrader.
+
+## Signal Pulse (WebView)
+
+Open-feed sentiment list (time + direction):
+https://kamani01.github.io/Dashboard/signal.html
