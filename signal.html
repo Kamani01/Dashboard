@@ -8,146 +8,200 @@
   <title>Signal Pulse</title>
   <style>
     :root, [data-theme="dark"] {
-      --bg: #0a0e17; --bg-elevated: #111827; --card: #151c2c;
-      --card-border: rgba(255,255,255,0.06); --text: #f3f6fc;
-      --text-secondary: #a8b3c7; --muted: #7b879c;
-      --good: #10b981; --good-soft: rgba(16,185,129,0.14);
-      --bad: #f43f5e; --bad-soft: rgba(244,63,94,0.14);
-      --warn: #f59e0b; --warn-soft: rgba(245,158,11,0.14);
-      --accent: #3b82f6; --accent-soft: rgba(59,130,246,0.16);
-      --track: rgba(255,255,255,0.08); --input-bg: #0d1320;
-      --shadow: 0 8px 28px rgba(0,0,0,0.35); --hairline: rgba(255,255,255,0.04);
+      --bg: #070b14; --card: #121826; --card-border: rgba(255,255,255,0.07);
+      --text: #f4f7fd; --text-secondary: #a8b3c7; --muted: #7b879c;
+      --good: #22c55e; --good-soft: rgba(34,197,94,0.16);
+      --bad: #f43f5e; --bad-soft: rgba(244,63,94,0.16);
+      --warn: #f59e0b; --warn-soft: rgba(245,158,11,0.16);
+      --accent: #60a5fa; --accent-soft: rgba(96,165,250,0.16);
+      --track: rgba(255,255,255,0.08); --input-bg: #0c1220;
+      --shadow: 0 10px 32px rgba(0,0,0,0.38); --hairline: rgba(255,255,255,0.05);
     }
     [data-theme="light"] {
-      --bg: #f4f6fa; --bg-elevated: #ffffff; --card: #ffffff;
-      --card-border: rgba(15,23,42,0.08); --text: #0f172a;
-      --text-secondary: #475569; --muted: #64748b;
-      --good: #059669; --good-soft: rgba(5,150,105,0.12);
+      --bg: #f3f5fa; --card: #fff; --card-border: rgba(15,23,42,0.08);
+      --text: #0f172a; --text-secondary: #475569; --muted: #64748b;
+      --good: #16a34a; --good-soft: rgba(22,163,74,0.12);
       --bad: #e11d48; --bad-soft: rgba(225,29,72,0.10);
       --warn: #d97706; --warn-soft: rgba(217,119,6,0.12);
       --accent: #2563eb; --accent-soft: rgba(37,99,235,0.12);
       --track: rgba(15,23,42,0.08); --input-bg: #f8fafc;
-      --shadow: 0 8px 24px rgba(15,23,42,0.08); --hairline: rgba(15,23,42,0.04);
+      --shadow: 0 8px 24px rgba(15,23,42,0.08); --hairline: rgba(15,23,42,0.05);
     }
     @media (prefers-color-scheme: light) {
       :root:not([data-theme="dark"]) {
-        --bg: #f4f6fa; --card: #ffffff; --text: #0f172a;
-        --text-secondary: #475569; --muted: #64748b;
-        --good: #059669; --bad: #e11d48; --warn: #d97706; --accent: #2563eb;
-        --card-border: rgba(15,23,42,0.08); --track: rgba(15,23,42,0.08);
-        --input-bg: #f8fafc; --hairline: rgba(15,23,42,0.04);
-        --good-soft: rgba(5,150,105,0.12); --bad-soft: rgba(225,29,72,0.10);
-        --warn-soft: rgba(217,119,6,0.12); --accent-soft: rgba(37,99,235,0.12);
+        --bg: #f3f5fa; --card: #fff; --text: #0f172a; --text-secondary: #475569; --muted: #64748b;
+        --good: #16a34a; --bad: #e11d48; --warn: #d97706; --accent: #2563eb;
+        --card-border: rgba(15,23,42,0.08); --track: rgba(15,23,42,0.08); --input-bg: #f8fafc;
+        --good-soft: rgba(22,163,74,0.12); --bad-soft: rgba(225,29,72,0.10);
+        --warn-soft: rgba(217,119,6,0.12); --accent-soft: rgba(37,99,235,0.12); --hairline: rgba(15,23,42,0.05);
       }
     }
     * { box-sizing: border-box; }
     html, body {
-      margin: 0; min-height: 100%;
-      background: var(--bg); color: var(--text);
+      margin: 0; min-height: 100%; background: var(--bg); color: var(--text);
       font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
       -webkit-font-smoothing: antialiased; -webkit-text-size-adjust: 100%;
     }
     body { padding: 14px; padding-bottom: calc(18px + env(safe-area-inset-bottom)); }
-    .shell { max-width: 720px; margin: 0 auto; }
-    .hero { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
-    .kicker { font-size: 11px; font-weight: 650; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
-    h1 { font-size: 20px; margin: 0; font-weight: 750; letter-spacing: -0.02em; line-height: 1.2; }
-    .sub { color: var(--text-secondary); font-size: 12.5px; margin-top: 4px; line-height: 1.35; }
-    .conn { font-size: 11px; color: var(--muted); margin: 8px 0 0; display: flex; align-items: center; gap: 6px; }
-    .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); flex: 0 0 auto; }
+    .shell { max-width: 760px; margin: 0 auto; }
+    .hero { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+    .brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+    .logo {
+      width: 42px; height: 42px; border-radius: 13px; flex: 0 0 auto;
+      background: radial-gradient(circle at 30% 20%, #93c5fd, #2563eb 55%, #1e3a8a);
+      display: grid; place-items: center; box-shadow: 0 6px 18px rgba(37,99,235,0.35);
+    }
+    .kicker { font-size: 11px; font-weight: 650; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+    h1 { font-size: 20px; margin: 1px 0 0; font-weight: 750; letter-spacing: -0.02em; }
+    .conn { font-size: 11px; color: var(--muted); margin-top: 4px; display: flex; align-items: center; gap: 6px; }
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
     .dot.on { background: var(--good); box-shadow: 0 0 0 3px var(--good-soft); }
     .dot.off { background: var(--warn); box-shadow: 0 0 0 3px var(--warn-soft); }
-    .badge { flex: 0 0 auto; display: inline-flex; align-items: center; padding: 7px 11px; border-radius: 999px; font-size: 11px; font-weight: 750; background: var(--accent-soft); color: var(--accent); border: 1px solid var(--card-border); white-space: nowrap; }
+    .badge {
+      display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; border-radius: 999px;
+      font-size: 12px; font-weight: 800; letter-spacing: 0.02em;
+      background: var(--accent-soft); color: var(--accent); border: 1px solid var(--card-border);
+    }
     .badge.ok { background: var(--good-soft); color: var(--good); }
     .badge.warn { background: var(--warn-soft); color: var(--warn); }
     .badge.bad { background: var(--bad-soft); color: var(--bad); }
-    .card { background: var(--card); border: 1px solid var(--card-border); border-radius: 16px; padding: 14px; box-shadow: var(--shadow); }
+    .card { background: var(--card); border: 1px solid var(--card-border); border-radius: 18px; padding: 14px; box-shadow: var(--shadow); margin-bottom: 10px; }
     .label { color: var(--muted); font-size: 11px; font-weight: 650; text-transform: uppercase; letter-spacing: 0.06em; }
-    .value { font-size: 22px; font-weight: 750; margin-top: 6px; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; line-height: 1.15; }
-    .value.sm { font-size: 16px; font-weight: 700; }
-    .pos { color: var(--good); }
-    .neg { color: var(--bad); }
+    .pos { color: var(--good); } .neg { color: var(--bad); }
+    .sym-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 10px; }
+    .sym-btn {
+      appearance: none; border: 1px solid var(--card-border); background: var(--input-bg); color: var(--text);
+      border-radius: 14px; padding: 9px 6px; cursor: pointer; text-align: center; min-width: 0;
+    }
+    .sym-btn .flag { font-size: 18px; line-height: 1.2; display: block; }
+    .sym-btn .code { font-size: 11px; font-weight: 800; letter-spacing: 0.02em; margin-top: 4px; }
+    .sym-btn.on { border-color: transparent; background: var(--accent-soft); color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+    .custom-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-top: 10px; }
+    .custom-row input, .settings input, select {
+      width: 100%; padding: 11px 12px; border-radius: 12px; border: 1px solid var(--card-border);
+      background: var(--input-bg); color: var(--text); font-size: 16px; outline: none;
+    }
+    .custom-row input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+    .vote-num { font-size: 42px; font-weight: 800; letter-spacing: -0.04em; line-height: 1; }
+    .vote-copy { font-size: 15px; font-weight: 700; margin-top: 8px; line-height: 1.35; }
+    .vote-sub { color: var(--muted); font-size: 12.5px; margin-top: 4px; }
+    .split { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+    .vote-box { border-radius: 14px; padding: 12px; background: var(--good-soft); }
+    .vote-box.sell { background: var(--bad-soft); }
+    .bar { height: 10px; background: var(--track); border-radius: 999px; overflow: hidden; margin-top: 12px; display: flex; }
+    .bar .buy { background: linear-gradient(90deg, #16a34a, #4ade80); }
+    .bar .sell { background: linear-gradient(90deg, #e11d48, #fb7185); }
+    .src-votes { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+    .src-pill {
+      display: inline-flex; align-items: center; gap: 6px; padding: 6px 9px; border-radius: 999px;
+      font-size: 11px; font-weight: 750; background: var(--input-bg); border: 1px solid var(--card-border);
+    }
+    .src-pill.buy { background: var(--good-soft); border-color: transparent; color: var(--good); }
+    .src-pill.sell { background: var(--bad-soft); border-color: transparent; color: var(--bad); }
+    .ico {
+      width: 18px; height: 18px; border-radius: 6px; display: inline-grid; place-items: center;
+      font-size: 10px; font-weight: 900; color: #fff; flex: 0 0 auto;
+    }
+    .ico svg { width: 12px; height: 12px; display: block; }
     .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
-    .chip { appearance: none; border: 1px solid var(--card-border); background: transparent; color: var(--text-secondary); border-radius: 999px; padding: 6px 10px; font-size: 11px; font-weight: 700; cursor: pointer; }
+    .chip {
+      appearance: none; border: 1px solid var(--card-border); background: transparent; color: var(--text-secondary);
+      border-radius: 999px; padding: 6px 10px; font-size: 11px; font-weight: 700; cursor: pointer;
+      display: inline-flex; align-items: center; gap: 6px;
+    }
     .chip.on { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
     .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
-    .btn { appearance: none; border: 0; border-radius: 12px; padding: 12px; background: var(--accent); color: #fff; font-weight: 750; font-size: 13.5px; cursor: pointer; }
+    .btn { appearance: none; border: 0; border-radius: 12px; padding: 12px; background: var(--accent); color: #fff; font-weight: 750; font-size: 13.5px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
     .btn.secondary { background: transparent; color: var(--text); border: 1px solid var(--card-border); }
     .hint { font-size: 11px; color: var(--muted); line-height: 1.45; margin-top: 8px; }
-    .list { margin-top: 6px; max-height: min(52vh, 520px); overflow: auto; -webkit-overflow-scrolling: touch; }
-    .row-item { display: grid; grid-template-columns: 1fr auto; gap: 8px 12px; padding: 11px 2px; border-top: 1px solid var(--hairline); }
+    .list { margin-top: 4px; max-height: min(48vh, 480px); overflow: auto; -webkit-overflow-scrolling: touch; }
+    .row-item { display: grid; grid-template-columns: 28px 1fr auto; gap: 10px; align-items: center; padding: 11px 2px; border-top: 1px solid var(--hairline); }
     .row-item:first-child { border-top: 0; }
     .sym { font-weight: 750; font-size: 13.5px; }
-    .side { display: inline-flex; margin-left: 6px; font-size: 10px; font-weight: 800; letter-spacing: 0.04em; padding: 2px 6px; border-radius: 999px; vertical-align: 1px; }
+    .side { display: inline-flex; margin-left: 6px; font-size: 10px; font-weight: 800; padding: 2px 6px; border-radius: 999px; }
     .side.buy { background: var(--good-soft); color: var(--good); }
     .side.sell { background: var(--bad-soft); color: var(--bad); }
     .side.watch { background: var(--warn-soft); color: var(--warn); }
     .side.news { background: var(--accent-soft); color: var(--accent); }
-    .meta { color: var(--muted); font-size: 11.5px; margin-top: 3px; font-variant-numeric: tabular-nums; }
-    .dir { font-weight: 750; font-size: 13.5px; text-align: right; align-self: center; font-variant-numeric: tabular-nums; }
+    .meta { color: var(--muted); font-size: 11.5px; margin-top: 3px; }
+    .dir { font-weight: 800; font-size: 12px; }
     .empty { padding: 18px 4px; color: var(--muted); font-size: 13px; text-align: center; }
-    details.card { padding: 0; margin-top: 10px; }
+    details.card { padding: 0; }
     details.card > summary { list-style: none; cursor: pointer; padding: 14px; font-weight: 700; font-size: 13.5px; display: flex; justify-content: space-between; align-items: center; }
     details.card > summary::-webkit-details-marker { display: none; }
     details.card > summary::after { content: "▾"; color: var(--muted); font-size: 12px; }
     details.card[open] > summary::after { content: "▴"; }
     .settings { padding: 0 14px 14px; display: grid; gap: 10px; border-top: 1px solid var(--hairline); padding-top: 12px; }
     .settings label { display: grid; gap: 6px; font-size: 12px; color: var(--muted); font-weight: 600; }
-    .settings input {
-      width: 100%; padding: 11px 12px; border-radius: 12px;
-      border: 1px solid var(--card-border); background: var(--input-bg); color: var(--text);
-      font-size: 16px; outline: none;
-    }
-    .settings input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
-    .head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
     body.place-asp_b, body.place-so_eb { padding: 10px; }
-    body.place-asp_b h1, body.place-so_eb h1 { font-size: 16px; }
-    body.place-asp_b .list, body.place-so_eb .list { max-height: 240px; }
-    body.place-tw_t .shell { max-width: 980px; }
+    body.place-asp_b .sym-grid, body.place-so_eb .sym-grid { grid-template-columns: repeat(3, 1fr); }
+    body.place-asp_b .vote-num, body.place-so_eb .vote-num { font-size: 32px; }
+    body.place-asp_b .list, body.place-so_eb .list { max-height: 200px; }
+    @media (max-width: 380px) { .sym-grid { grid-template-columns: repeat(3, 1fr); } }
   </style>
 </head>
 <body>
   <div class="shell">
     <div class="hero">
-      <div>
-        <div class="kicker">Open feeds</div>
-        <h1>Signal Pulse</h1>
-        <div class="sub">Time · source · instrument · direction</div>
-        <div class="conn"><span class="dot off" id="connDot"></span><span id="connText">Loading feeds…</span></div>
+      <div class="brand">
+        <div class="logo" aria-hidden="true">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+            <path d="M3 13c4-9 6 9 10 0s6 9 8 0" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <div>
+          <div class="kicker">Open feeds</div>
+          <h1>Signal Pulse</h1>
+          <div class="conn"><span class="dot off" id="connDot"></span><span id="connText">Loading…</span></div>
+        </div>
       </div>
       <div id="status" class="badge">WAITING</div>
     </div>
 
-    <div class="card" style="margin-bottom:10px">
-      <div class="head">
-        <div>
-          <div class="label">Active symbol</div>
-          <div id="sym" class="value sm">—</div>
-        </div>
-        <div>
-          <div class="label" style="text-align:right">Consensus</div>
-          <div id="consensus" class="value sm" style="text-align:right">—</div>
-        </div>
+    <div class="card">
+      <div class="label">Default symbol</div>
+      <div class="sym-grid" id="symGrid"></div>
+      <div class="custom-row">
+        <input id="cfgSymbol" placeholder="Custom: NAS100, GER40…" maxlength="16" />
+        <button class="btn secondary" id="btnSetSym" type="button">Set</button>
       </div>
-      <div class="chips" id="sourceChips"></div>
-      <div class="actions">
-        <button class="btn" id="btnRefresh" type="button">Refresh feeds</button>
-        <button class="btn secondary" id="btnFilter" type="button">Active symbol only</button>
-      </div>
-      <div class="hint" id="statusLine">Uses public JSON/RSS. Browser CORS is bypassed via a read proxy when needed.</div>
+      <div class="hint" id="symHint">Saved on this device. Chart symbol is used only if you have not picked one.</div>
     </div>
 
     <div class="card">
-      <div class="label">Feed list</div>
+      <div class="label">How the street sees it</div>
+      <div id="voteCopy" class="vote-copy">Waiting for feeds…</div>
+      <div id="voteSub" class="vote-sub"></div>
+      <div class="bar"><span class="buy" id="buyBar"></span><span class="sell" id="sellBar"></span></div>
+      <div class="split">
+        <div class="vote-box">
+          <div class="label">Buy</div>
+          <div id="buyNum" class="vote-num pos">0</div>
+          <div class="vote-sub">sources</div>
+        </div>
+        <div class="vote-box sell">
+          <div class="label">Sell</div>
+          <div id="sellNum" class="vote-num neg">0</div>
+          <div class="vote-sub">sources</div>
+        </div>
+      </div>
+      <div class="src-votes" id="srcVotes"></div>
+      <div class="chips" id="sourceChips"></div>
+      <div class="actions">
+        <button class="btn" id="btnRefresh" type="button">↻ Refresh</button>
+        <button class="btn secondary" id="btnFilter" type="button">This symbol only</button>
+      </div>
+      <div class="hint" id="statusLine">Each source gets one vote for the selected symbol.</div>
+    </div>
+
+    <div class="card">
+      <div class="label">Latest items</div>
       <div class="list" id="list"></div>
     </div>
 
     <details class="card">
       <summary>Optional sources</summary>
       <div class="settings">
-        <label>Override symbol
-          <input id="cfgSymbol" placeholder="EURUSD" />
-        </label>
         <label>Myfxbook session
           <input id="cfgMfx" placeholder="session id" autocomplete="off" />
         </label>
@@ -157,8 +211,7 @@
         <label>Extra public RSS URL
           <input id="cfgRss" placeholder="https://…" />
         </label>
-        <button class="btn" id="btnSave" type="button">Save</button>
-        <div class="hint">eToro / Discord / broker apps are not open. Paste an RSS URL if you have one. Myfxbook needs a session from their API login.</div>
+        <button class="btn" id="btnSave" type="button">Save extras</button>
       </div>
     </details>
   </div>
@@ -179,6 +232,17 @@
     const BULL = ["bullish","buy "," buys","long ","rally","rallies","climbs","climb ","surge","surges","upside","gains","gain ","breakout","breaks higher","rebounds","recover","strong buy"];
     const BEAR = ["bearish","sell "," sells","short ","slump","drops","drop ","tumble","downside","falls","fall ","declines","decline ","breaks lower","sell-off","selloff","strong sell"];
     const INVERSE = ["unemployment","jobless","claims","inventories","inventory","deficit"];
+    const SOURCE_META = {
+      TradingView: { short: "TV", color: "#2962ff", letter: "TV" },
+      ForexFactory: { short: "FF", color: "#f59e0b", letter: "FF" },
+      FXStreet: { short: "FXS", color: "#0ea5e9", letter: "FX" },
+      Investing: { short: "INV", color: "#f97316", letter: "IN" },
+      Reddit: { short: "R", color: "#ff4500", letter: "re" },
+      Bloomberg: { short: "BB", color: "#64748b", letter: "B" },
+      Myfxbook: { short: "MFX", color: "#16a34a", letter: "M" },
+      Telegram: { short: "TG", color: "#229ed9", letter: "✈" },
+      RSS: { short: "RSS", color: "#a855f7", letter: "RS" },
+    };
     const SOURCES = [
       { id: "tv", label: "TradingView" },
       { id: "ff", label: "Forex Factory" },
@@ -187,14 +251,26 @@
       { id: "reddit", label: "Reddit" },
       { id: "bb", label: "Bloomberg" },
     ];
+    const PICKS = [
+      { code: "EURUSD", flag: "🇪🇺🇺🇸" },
+      { code: "GBPUSD", flag: "🇬🇧🇺🇸" },
+      { code: "USDJPY", flag: "🇺🇸🇯🇵" },
+      { code: "XAUUSD", flag: "🥇" },
+      { code: "XAGUSD", flag: "🥈" },
+      { code: "US500", flag: "📈" },
+      { code: "BTCUSD", flag: "₿" },
+      { code: "AUDUSD", flag: "🇦🇺🇺🇸" },
+    ];
     const DEFAULTS = {
       sources: { tv: true, ff: true, fxs: true, inv: true, reddit: true, bb: false },
       activeOnly: true, symbol: "", mfx: "", tg: "", rss: "",
     };
 
     function loadCfg() {
-      try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem("signalPulseCfg") || "{}"), sources: { ...DEFAULTS.sources, ...(JSON.parse(localStorage.getItem("signalPulseCfg") || "{}").sources || {}) } }; }
-      catch { return { ...DEFAULTS, sources: { ...DEFAULTS.sources } }; }
+      try {
+        const raw = JSON.parse(localStorage.getItem("signalPulseCfg") || "{}");
+        return { ...DEFAULTS, ...raw, sources: { ...DEFAULTS.sources, ...(raw.sources || {}) } };
+      } catch { return { ...DEFAULTS, sources: { ...DEFAULTS.sources } }; }
     }
     function saveCfg(cfg) { localStorage.setItem("signalPulseCfg", JSON.stringify(cfg)); }
 
@@ -203,17 +279,25 @@
     let refreshing = false;
     const querySymbol = (params.get("symbol") || "").toUpperCase();
 
+    function norm(s) { return (s || "").replace(/[\/\-_]/g, "").trim().toUpperCase(); }
     function activeSymbol() {
-      const o = (cfg.symbol || "").replace(/[\/\-_]/g, "").toUpperCase().trim();
+      const o = norm(cfg.symbol);
       if (o) return o;
-      return querySymbol || "EURUSD";
+      return norm(querySymbol) || "EURUSD";
     }
-
+    function pretty(sym) {
+      const n = norm(sym);
+      if (n.length === 6) return n.slice(0, 3) + "/" + n.slice(3);
+      return n || "—";
+    }
+    function sourceIco(name) {
+      const m = SOURCE_META[name] || { color: "#64748b", letter: (name || "?").slice(0, 2) };
+      return `<span class="ico" style="background:${m.color}" title="${escapeHtml(name)}">${m.letter}</span>`;
+    }
     function setConn(on, text) {
       $("connDot").className = "dot " + (on ? "on" : "off");
       $("connText").textContent = text;
     }
-
     function unwrap(text) {
       if (!text) return "";
       const xml = text.search(/<\?xml|<rss\b|<feed\b|<html\b/i);
@@ -223,7 +307,6 @@
       const j = [arr, obj].filter((i) => i >= 0).sort((a, b) => a - b)[0];
       return j >= 0 ? text.slice(j) : text;
     }
-
     async function fetchText(url, opts = {}) {
       const method = opts.method || "GET";
       const init = { method, headers: { Accept: "*/*", ...(opts.headers || {}) } };
@@ -249,8 +332,6 @@
       }
       throw new Error("blocked " + url);
     }
-
-    function norm(s) { return (s || "").replace(/[\/\-_]/g, "").trim().toUpperCase(); }
     function trimTitle(s) { s = (s || "").replace(/\s+/g, " ").trim(); return s.length <= 86 ? s : s.slice(0, 83) + "…"; }
     function headlineDir(title) {
       const t = " " + title.toLowerCase() + " ";
@@ -322,7 +403,6 @@
       }
       return out;
     }
-
     async function fetchTv(symbol) {
       const body = JSON.stringify({
         symbols: { tickers: tvTickers(symbol), query: { types: [] } },
@@ -331,29 +411,21 @@
       let text;
       try {
         const res = await fetch("https://scanner.tradingview.com/forex/scan", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Accept: "application/json" },
-          body,
+          method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json" }, body,
         });
         if (!res.ok) throw new Error(String(res.status));
         text = await res.text();
-      } catch {
-        throw new Error("TradingView scanner blocked in WebView (CORS)");
-      }
+      } catch { throw new Error("TradingView scanner blocked in WebView (CORS)"); }
       const json = JSON.parse(unwrap(text));
       const out = [];
       for (const row of json.data || []) {
         const rec = Number(row.d?.[0]);
         if (!Number.isFinite(rec)) continue;
         const dir = rec >= 0.15 ? "BUY" : rec <= -0.15 ? "SELL" : "NEUTRAL";
-        out.push({
-          source: "TradingView", utc: Date.now(), instrument: fromTv(row.s || ""),
-          direction: dir, title: `Recommend.All ${rec.toFixed(2)} (snapshot)`, score: rec,
-        });
+        out.push({ source: "TradingView", utc: Date.now(), instrument: fromTv(row.s || ""), direction: dir, title: `Recommend.All ${rec.toFixed(2)} (snapshot)`, score: rec });
       }
       return out;
     }
-
     async function fetchFf() {
       const text = await fetchText("https://nfs.faireconomy.media/ff_calendar_thisweek.json");
       const arr = JSON.parse(text);
@@ -372,26 +444,18 @@
           if (INVERSE.some((k) => title.toLowerCase().includes(k))) stronger = !stronger;
           dir = stronger ? "BUY" : "SELL";
         }
-        out.push({
-          source: "ForexFactory", utc: when, instrument: String(e.country || ""),
-          direction: dir, title: trimTitle(`${impact} ${title} act=${e.actual || ""} fcst=${e.forecast || ""}`),
-        });
+        out.push({ source: "ForexFactory", utc: when, instrument: String(e.country || ""), direction: dir, title: trimTitle(`${impact} ${title} act=${e.actual || ""} fcst=${e.forecast || ""}`) });
       }
       return out;
     }
-
     async function fetchReddit() {
       const text = await fetchText("https://old.reddit.com/r/Forex/new.json?limit=20");
       const json = JSON.parse(text);
-      const kids = json?.data?.children || [];
-      return kids.map((c) => {
-        const d = c.data || {};
-        const title = d.title || "";
-        const utc = d.created_utc ? d.created_utc * 1000 : Date.now();
-        return { source: "Reddit", utc, instrument: extractInstrument(title), direction: headlineDir(title), title: trimTitle(title) };
+      return (json?.data?.children || []).map((c) => {
+        const d = c.data || {}, title = d.title || "";
+        return { source: "Reddit", utc: d.created_utc ? d.created_utc * 1000 : Date.now(), instrument: extractInstrument(title), direction: headlineDir(title), title: trimTitle(title) };
       }).filter((x) => x.title);
     }
-
     async function fetchMfx(symbol, session) {
       const text = await fetchText("https://www.myfxbook.com/api/get-community-outlook.json?session=" + encodeURIComponent(session));
       const json = JSON.parse(text);
@@ -408,7 +472,6 @@
       }
       return out;
     }
-
     async function fetchTelegram(ch) {
       const name = ch.trim().replace(/^@/, "");
       if (!/^[A-Za-z0-9_]{3,}$/.test(name)) throw new Error("bad channel");
@@ -416,9 +479,8 @@
       const times = [...html.matchAll(/datetime="([^"]+)"/g)].map((m) => m[1]);
       const texts = [...html.matchAll(/js-message_text[^>]*>([\s\S]*?)<\/div>/g)].map((m) => m[1]);
       const n = Math.min(times.length, texts.length);
-      const start = Math.max(0, n - 8);
       const out = [];
-      for (let i = start; i < n; i++) {
+      for (let i = Math.max(0, n - 8); i < n; i++) {
         const raw = trimTitle(texts[i].replace(/<[^>]+>/g, " ").replace(/\s+/g, " "));
         if (raw.length < 8) continue;
         const when = Date.parse(times[i]);
@@ -427,51 +489,97 @@
       return out;
     }
 
+    function sourceVotes(symbol) {
+      const bag = new Map();
+      for (const i of items) {
+        if (i.direction === "ERR") continue;
+        if (!relatesTo(symbol, i.instrument)) continue;
+        const d = pairDir(symbol, i.instrument, i.direction);
+        if (d !== "BUY" && d !== "SELL") continue;
+        if (!bag.has(i.source)) bag.set(i.source, { buy: 0, sell: 0 });
+        bag.get(i.source)[d === "BUY" ? "buy" : "sell"]++;
+      }
+      const votes = [];
+      for (const [source, c] of bag) {
+        if (c.buy === c.sell) continue;
+        votes.push({ source, dir: c.buy > c.sell ? "BUY" : "SELL", buy: c.buy, sell: c.sell });
+      }
+      return votes;
+    }
+
+    function setDefaultSymbol(code, refreshFeeds = true) {
+      cfg.symbol = norm(code);
+      saveCfg(cfg);
+      renderSymGrid();
+      render();
+      if (refreshFeeds) refresh();
+    }
+
+    function renderSymGrid() {
+      const cur = activeSymbol();
+      $("symGrid").innerHTML = PICKS.map((p) =>
+        `<button class="sym-btn ${norm(p.code) === cur ? "on" : ""}" data-sym="${p.code}" type="button">
+          <span class="flag">${p.flag}</span><span class="code">${p.code}</span>
+        </button>`
+      ).join("");
+      $("cfgSymbol").value = PICKS.some((p) => p.code === cur) ? "" : (cfg.symbol || "");
+      $("symHint").textContent = cfg.symbol
+        ? `Default saved: ${pretty(cur)}. This wins over the chart symbol.`
+        : (querySymbol ? `Using chart symbol ${pretty(querySymbol)} until you pick a default.` : "Pick a default. Saved on this phone.");
+    }
+
     function renderSourceChips() {
       $("sourceChips").innerHTML = SOURCES.map((s) =>
-        `<button class="chip ${cfg.sources[s.id] ? "on" : ""}" data-src="${s.id}" type="button">${s.label}</button>`
+        `<button class="chip ${cfg.sources[s.id] ? "on" : ""}" data-src="${s.id}" type="button">${sourceIco(s.label)} ${s.label}</button>`
       ).join("");
     }
 
     function render() {
       const symbol = activeSymbol();
-      $("sym").textContent = symbol;
-      $("btnFilter").textContent = cfg.activeOnly ? "Active symbol only" : "All instruments";
+      const pair = pretty(symbol);
+      $("btnFilter").textContent = cfg.activeOnly ? "This symbol only" : "All instruments";
+      const votes = sourceVotes(symbol);
+      const buy = votes.filter((v) => v.dir === "BUY").length;
+      const sell = votes.filter((v) => v.dir === "SELL").length;
+      const total = buy + sell;
+      $("buyNum").textContent = String(buy);
+      $("sellNum").textContent = String(sell);
+      $("buyBar").style.width = total ? `${(buy / total) * 100}%` : "0%";
+      $("sellBar").style.width = total ? `${(sell / total) * 100}%` : "0%";
+      const copy = $("voteCopy");
+      const sub = $("voteSub");
+      const st = $("status");
+      st.className = "badge";
+      if (!total) {
+        copy.textContent = `No directed source votes on ${pair} yet.`;
+        sub.textContent = "Turn on more sources or wait for the next refresh.";
+        st.textContent = "NO VOTE";
+      } else if (buy > sell) {
+        copy.innerHTML = `<span class="pos">${buy} source${buy === 1 ? "" : "s"} say ${escapeHtml(pair)} is a buy</span>`;
+        sub.textContent = sell ? `${sell} say sell.` : "Nobody in this sample is calling sell.";
+        st.textContent = "BUY"; st.classList.add("ok");
+      } else if (sell > buy) {
+        copy.innerHTML = `<span class="neg">${sell} source${sell === 1 ? "" : "s"} say ${escapeHtml(pair)} is a sell</span>`;
+        sub.textContent = buy ? `${buy} say buy.` : "Nobody in this sample is calling buy.";
+        st.textContent = "SELL"; st.classList.add("bad");
+      } else {
+        copy.textContent = `Split: ${buy} sources buy ${pair}, ${sell} sell.`;
+        sub.textContent = "No edge from the open feeds.";
+        st.textContent = "MIXED"; st.classList.add("warn");
+      }
+      $("srcVotes").innerHTML = votes.map((v) =>
+        `<span class="src-pill ${v.dir.toLowerCase()}">${sourceIco(v.source)}${escapeHtml(SOURCE_META[v.source]?.short || v.source)} ${v.dir}</span>`
+      ).join("") || `<span class="hint">Source votes appear here.</span>`;
+
       const shown = items
         .filter((i) => i.direction !== "ERR")
         .filter((i) => !cfg.activeOnly || relatesTo(symbol, i.instrument))
         .sort((a, b) => b.utc - a.utc)
         .slice(0, 40);
-      const rel = items.filter((i) => (i.direction === "BUY" || i.direction === "SELL") && relatesTo(symbol, i.instrument));
-      let buy = 0, sell = 0;
-      for (const i of rel) {
-        const d = pairDir(symbol, i.instrument, i.direction);
-        if (d === "BUY") buy++;
-        else if (d === "SELL") sell++;
-      }
-      const cons = $("consensus");
-      const st = $("status");
-      cons.classList.remove("pos", "neg");
-      st.className = "badge";
-      if (!buy && !sell) {
-        cons.textContent = "Not enough directed items";
-        st.textContent = shown.length ? "NEWS" : "NO DATA";
-      } else if (buy > sell) {
-        cons.textContent = `BUY  (${buy} vs ${sell} sell)`;
-        cons.classList.add("pos");
-        st.textContent = "BUY"; st.classList.add("ok");
-      } else if (sell > buy) {
-        cons.textContent = `SELL  (${sell} vs ${buy} buy)`;
-        cons.classList.add("neg");
-        st.textContent = "SELL"; st.classList.add("bad");
-      } else {
-        cons.textContent = `MIXED  (${buy} / ${sell})`;
-        st.textContent = "MIXED"; st.classList.add("warn");
-      }
-
       const host = $("list");
       if (!shown.length) {
-        host.innerHTML = `<div class="empty">${items.some((i) => i.direction === "ERR") ? items.filter((i) => i.direction === "ERR").map((i) => i.title).join(" · ") : "No matching items yet."}</div>`;
+        const errs = items.filter((i) => i.direction === "ERR").map((i) => i.source + ": " + i.title);
+        host.innerHTML = `<div class="empty">${errs.length ? errs.join(" · ") : "No matching items yet."}</div>`;
         return;
       }
       host.innerHTML = shown.map((i) => {
@@ -479,6 +587,7 @@
         const cls = d === "BUY" || d === "BULL" ? "buy" : d === "SELL" || d === "BEAR" ? "sell" : d === "WATCH" ? "watch" : "news";
         const when = new Date(i.utc).toISOString().slice(5, 16).replace("T", " ") + "Z";
         return `<div class="row-item">
+          ${sourceIco(i.source)}
           <div>
             <div class="sym">${escapeHtml(i.instrument || "—")}<span class="side ${cls}">${escapeHtml(d)}</span></div>
             <div class="meta">${escapeHtml(when)} · ${escapeHtml(i.source)} · ${escapeHtml(i.title)}</div>
@@ -508,48 +617,47 @@
       if (cfg.mfx) jobs.push(["Myfxbook", () => fetchMfx(symbol, cfg.mfx)]);
       if (cfg.tg) jobs.push(["Telegram", () => fetchTelegram(cfg.tg)]);
       if (cfg.rss) jobs.push(["RSS", () => fetchText(cfg.rss).then((t) => parseRss(t, "RSS"))]);
-
       const next = [];
       let ok = 0, fail = 0;
       for (const [name, fn] of jobs) {
-        try {
-          const batch = await fn();
-          next.push(...(batch || []));
-          ok++;
-        } catch (err) {
-          fail++;
-          next.push({ source: name, utc: Date.now(), instrument: "", direction: "ERR", title: String(err.message || err) });
-        }
+        try { next.push(...(await fn() || [])); ok++; }
+        catch (err) { fail++; next.push({ source: name, utc: Date.now(), instrument: "", direction: "ERR", title: String(err.message || err) }); }
       }
       items = next;
       refreshing = false;
       $("btnRefresh").disabled = false;
       setConn(ok > 0, ok ? `${ok} source${ok === 1 ? "" : "s"} live${fail ? ` · ${fail} failed` : ""}` : "Preview / fetch failed");
-      $("statusLine").textContent = `Last refresh ${new Date().toISOString().slice(11, 16)}Z · ${items.filter((i) => i.direction !== "ERR").length} items`;
+      $("statusLine").textContent = `Updated ${new Date().toISOString().slice(11, 16)}Z · one vote per source on ${pretty(symbol)}.`;
       render();
     }
 
-    function fillSettings() {
-      $("cfgSymbol").value = cfg.symbol || "";
-      $("cfgMfx").value = cfg.mfx || "";
-      $("cfgTg").value = cfg.tg || "";
-      $("cfgRss").value = cfg.rss || "";
-    }
-
+    renderSymGrid();
     renderSourceChips();
-    fillSettings();
+    $("cfgMfx").value = cfg.mfx || "";
+    $("cfgTg").value = cfg.tg || "";
+    $("cfgRss").value = cfg.rss || "";
+
+    $("symGrid").onclick = (ev) => {
+      const btn = ev.target.closest("[data-sym]");
+      if (btn) setDefaultSymbol(btn.getAttribute("data-sym"));
+    };
+    $("btnSetSym").onclick = () => {
+      const v = $("cfgSymbol").value.trim();
+      if (v) setDefaultSymbol(v);
+    };
+    $("cfgSymbol").addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter") { ev.preventDefault(); $("btnSetSym").click(); }
+    });
     $("sourceChips").onclick = (ev) => {
       const btn = ev.target.closest("[data-src]");
       if (!btn) return;
-      const id = btn.getAttribute("data-src");
-      cfg.sources[id] = !cfg.sources[id];
+      cfg.sources[btn.getAttribute("data-src")] = !cfg.sources[btn.getAttribute("data-src")];
       saveCfg(cfg);
       renderSourceChips();
     };
     $("btnFilter").onclick = () => { cfg.activeOnly = !cfg.activeOnly; saveCfg(cfg); render(); };
     $("btnRefresh").onclick = () => refresh();
     $("btnSave").onclick = () => {
-      cfg.symbol = $("cfgSymbol").value.trim();
       cfg.mfx = $("cfgMfx").value.trim();
       cfg.tg = $("cfgTg").value.trim();
       cfg.rss = $("cfgRss").value.trim();
@@ -563,10 +671,7 @@
       handleConfirmEvent(adapter, {}).pipe(take(1)).subscribe();
       registerEvent(adapter).pipe(
         take(1),
-        tap(() => {
-          handleConfirmEvent(adapter, {}).pipe(take(1)).subscribe();
-          setConn(true, "cTrader web plugin connected");
-        }),
+        tap(() => { handleConfirmEvent(adapter, {}).pipe(take(1)).subscribe(); setConn(true, "cTrader web plugin connected"); }),
         catchError(() => [])
       ).subscribe();
     } catch {}
