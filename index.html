@@ -161,6 +161,10 @@
       font-size: 11px; font-weight: 750; padding: 3px 8px; border-radius: 999px;
       background: var(--hairline); color: var(--text-secondary); white-space: nowrap;
     }
+    .pct-pill.ok { background: var(--good-soft); color: var(--good); }
+    .pct-pill.warn { background: var(--warn-soft); color: var(--warn); }
+    .pct-pill.bad { background: var(--bad-soft); color: var(--bad); }
+    .pill.ok { background: var(--good-soft); color: var(--good); }
 
     .bar {
       height: 8px; background: var(--track); border-radius: 999px; overflow: hidden; margin-top: 12px;
@@ -310,7 +314,7 @@
         </div>
         <div id="chProfitPct" class="pct-pill">0%</div>
       </div>
-      <div class="bar good"><span id="chProfitBar"></span></div>
+      <div class="bar good" id="chProfitBarWrap"><span id="chProfitBar"></span></div>
       <div class="row"><span id="chProfitLeft">—</span><span id="chPhase">Phase 1</span></div>
 
       <div class="progress-head" style="margin-top:12px">
@@ -320,7 +324,7 @@
         </div>
         <div id="chDailyPct" class="pct-pill">0%</div>
       </div>
-      <div class="bar bad"><span id="chDailyBar"></span></div>
+      <div class="bar bad" id="chDailyBarWrap"><span id="chDailyBar"></span></div>
       <div class="row"><span id="chDailyLeft">—</span><span>Used today</span></div>
 
       <div class="progress-head" style="margin-top:12px">
@@ -330,7 +334,7 @@
         </div>
         <div id="chMaxPct" class="pct-pill">0%</div>
       </div>
-      <div class="bar warn"><span id="chMaxBar"></span></div>
+      <div class="bar warn" id="chMaxBarWrap"><span id="chMaxBar"></span></div>
       <div class="row"><span id="chMaxLeft">—</span><span id="chMaxKind">From start</span></div>
 
       <div class="progress-head" style="margin-top:12px">
@@ -340,7 +344,7 @@
         </div>
         <div id="chDaysPct" class="pct-pill">0/0</div>
       </div>
-      <div class="bar"><span id="chDaysBar"></span></div>
+      <div class="bar" id="chDaysBarWrap"><span id="chDaysBar"></span></div>
       <div class="row"><span id="chDaysLeft">+0.5% vs prior EOD high</span><span>20:55 UTC</span></div>
       <div id="chAlert"></div>
       <div class="hint" id="chHint">Only closes after you select a plan count. Changing plan or size resets the sim.</div>
@@ -698,51 +702,68 @@
       const ev = evalChallenge(allTrades.length ? allTrades : trades, floating, Date.now());
       $("chTitle").textContent = `${prog.name} · ${money(challenge.size, currency || "USD")}`;
       $("chPhase").textContent = phase.name + (prog.phases ? ` (${challenge.phase + 1}/${prog.phases.length})` : "");
+      const profitMet = !ev.target || ev.profit >= ev.target - 1e-8;
+      const daysMet = !ev.daysNeed || ev.profitDays >= ev.daysNeed;
+      const dailyFail = ev.fail?.rule === "Daily loss";
+      const maxFail = ev.fail?.rule === "Max loss";
+      const dailyOk = !dailyFail && ev.dailyUsed / ev.dailyLimit < 0.7;
+      const maxOk = !maxFail && (ev.maxRoom <= 0 || ev.maxUsed / ev.maxRoom < 0.7);
+
       $("chPills").innerHTML = [
-        `${phase.targetPct ? phase.targetPct + "% target" : "No target"}`,
-        `${prog.dailyPct}% daily`,
-        `${prog.maxPct}% ${prog.maxType === "trailing" ? "trailing" : "static"} max`,
-        `${ev.daysNeed} profitable days`,
-        prog.news,
-        prog.overnight ? "No overnight 20:30–22:00 UTC" : null,
-        prog.weekend ? "Flat by Friday 20:30 UTC" : null,
-      ].filter(Boolean).map((t) => `<span class="pill">${t}</span>`).join("");
+        { t: phase.targetPct ? phase.targetPct + "% target" : "No target", on: profitMet },
+        { t: `${prog.dailyPct}% daily`, on: dailyOk },
+        { t: `${prog.maxPct}% ${prog.maxType === "trailing" ? "trailing" : "static"} max`, on: maxOk },
+        { t: `${ev.daysNeed} profitable days`, on: daysMet },
+        { t: prog.news, on: false },
+        { t: prog.overnight ? "No overnight 20:30–22:00 UTC" : null, on: false },
+        { t: prog.weekend ? "Flat by Friday 20:30 UTC" : null, on: false },
+      ].filter((x) => x.t).map((x) => `<span class="pill${x.on ? " ok" : ""}">${x.t}</span>`).join("");
 
       const badge = $("chBadge");
       badge.className = "pct-pill";
-      if (ev.status === "failed") { badge.textContent = "FAILED"; badge.style.color = "var(--bad)"; }
-      else if (ev.status === "passed") { badge.textContent = "PASSED"; badge.style.color = "var(--good)"; }
-      else { badge.textContent = "LIVE"; badge.style.color = "var(--accent)"; }
+      badge.style.color = "";
+      if (ev.status === "failed") { badge.textContent = "FAILED"; badge.classList.add("bad"); }
+      else if (ev.status === "passed") { badge.textContent = "PASSED"; badge.classList.add("ok"); }
+      else { badge.textContent = "LIVE"; }
 
-      const tgt = ev.target || 1;
-      const pPct = ev.target ? Math.max(0, Math.min(100, (ev.profit / tgt) * 100)) : 0;
+      const pPct = ev.target ? Math.max(0, Math.min(100, (ev.profit / ev.target) * 100)) : 100;
       $("chProfit").textContent = ev.target ? `${money(ev.profit, currency)} / ${money(ev.target, currency)}` : "No profit target";
-      $("chProfitPct").textContent = ev.target ? `${pPct.toFixed(0)}%` : "—";
+      $("chProfitPct").textContent = profitMet ? "MET" : `${pPct.toFixed(0)}%`;
+      $("chProfitPct").className = "pct-pill" + (profitMet ? " ok" : "");
       $("chProfitBar").style.width = `${pPct}%`;
+      $("chProfitBarWrap").className = "bar " + (profitMet ? "good" : "");
       $("chProfitLeft").textContent = ev.closes ? `${ev.closes} close${ev.closes === 1 ? "" : "s"} since start` : "No closes since this challenge started";
-      setPlClass($("chProfit"), ev.profit);
+      setPlClass($("chProfit"), profitMet ? 1 : ev.profit);
 
       const dPct = Math.max(0, Math.min(100, (ev.dailyUsed / ev.dailyLimit) * 100));
       $("chDaily").textContent = `${money(ev.dailyUsed, currency)} / ${money(ev.dailyLimit, currency)}`;
-      $("chDailyPct").textContent = `${dPct.toFixed(0)}%`;
+      $("chDailyPct").textContent = dailyFail ? "BREACH" : dailyOk ? "OK" : `${dPct.toFixed(0)}%`;
+      $("chDailyPct").className = "pct-pill" + (dailyFail ? " bad" : dailyOk ? " ok" : " warn");
       $("chDailyBar").style.width = `${dPct}%`;
+      $("chDailyBarWrap").className = "bar " + (dailyFail ? "bad" : dailyOk ? "good" : "warn");
       $("chDailyLeft").textContent = `Floor ${money(ev.dailyFloorNow, currency)}`;
+      setPlClass($("chDaily"), dailyFail ? -1 : dailyOk ? 1 : 0);
 
       const mPct = ev.maxRoom > 0 ? Math.max(0, Math.min(100, (ev.maxUsed / ev.maxRoom) * 100)) : 0;
       $("chMax").textContent = `${money(ev.maxUsed, currency)} used`;
-      $("chMaxPct").textContent = `${mPct.toFixed(0)}%`;
+      $("chMaxPct").textContent = maxFail ? "BREACH" : maxOk ? "OK" : `${mPct.toFixed(0)}%`;
+      $("chMaxPct").className = "pct-pill" + (maxFail ? " bad" : maxOk ? " ok" : " warn");
       $("chMaxBar").style.width = `${mPct}%`;
+      $("chMaxBarWrap").className = "bar " + (maxFail ? "bad" : maxOk ? "good" : "warn");
       $("chMaxLeft").textContent = `Must stay above ${money(ev.maxFloorNow, currency)}`;
       $("chMaxKind").textContent = prog.maxType === "trailing" ? "Trailing, cap at start" : "Static from start";
+      setPlClass($("chMax"), maxFail ? -1 : maxOk ? 1 : 0);
 
-      const dayPct = ev.daysNeed ? Math.max(0, Math.min(100, (ev.profitDays / ev.daysNeed) * 100)) : 0;
+      const dayPct = ev.daysNeed ? Math.max(0, Math.min(100, (ev.profitDays / ev.daysNeed) * 100)) : 100;
       $("chDays").textContent = `${ev.profitDays} / ${ev.daysNeed}`;
-      $("chDaysPct").textContent = `${ev.profitDays}/${ev.daysNeed}`;
+      $("chDaysPct").textContent = daysMet ? "MET" : `${ev.profitDays}/${ev.daysNeed}`;
+      $("chDaysPct").className = "pct-pill" + (daysMet ? " ok" : "");
       $("chDaysBar").style.width = `${dayPct}%`;
-      $("chDaysBar").style.background = "linear-gradient(90deg, #2563eb, #93c5fd)";
+      $("chDaysBarWrap").className = "bar " + (daysMet ? "good" : "");
       $("chDaysLeft").textContent = prog.rollingDays
         ? `${ev.profitDays} qualifying days in last ${prog.rollingDays}`
         : "+0.5% vs prior EOD high";
+      setPlClass($("chDays"), daysMet ? 1 : 0);
 
       const alert = $("chAlert");
       if (ev.status === "failed") {
