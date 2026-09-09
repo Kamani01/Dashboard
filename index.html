@@ -170,6 +170,9 @@
       display: block; height: 100%; width: 0%;
       transition: width .4s cubic-bezier(.2,.8,.2,1);
     }
+    .bar.good > span { background: linear-gradient(90deg, #059669, #34d399); }
+    .bar.bad > span { background: linear-gradient(90deg, #e11d48, #fb7185); }
+    .bar.warn > span { background: linear-gradient(90deg, #d97706, #fbbf24); }
     .bar.winloss { gap: 0; }
     .bar.winloss .win { background: linear-gradient(90deg, #059669, #34d399); }
     .bar.winloss .loss { background: linear-gradient(90deg, #e11d48, #fb7185); margin-left: auto; }
@@ -240,6 +243,25 @@
       background: transparent; color: var(--text); border: 1px solid var(--card-border);
     }
     .hint { font-size: 11px; color: var(--muted); line-height: 1.45; margin-top: 8px; }
+    .pickers { display: grid; grid-template-columns: 1.4fr 1fr; gap: 8px; margin-top: 10px; }
+    select {
+      width: 100%; padding: 11px 12px; border-radius: 12px;
+      border: 1px solid var(--card-border); background: var(--input-bg); color: var(--text);
+      font-size: 14px; font-weight: 650; outline: none;
+    }
+    .rule-pills { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+    .pill {
+      font-size: 11px; font-weight: 700; padding: 4px 8px; border-radius: 999px;
+      background: var(--hairline); color: var(--text-secondary);
+    }
+    .fail-box {
+      margin-top: 10px; padding: 10px 12px; border-radius: 12px;
+      background: var(--bad-soft); color: var(--bad); font-size: 13px; font-weight: 700;
+    }
+    .pass-box {
+      margin-top: 10px; padding: 10px 12px; border-radius: 12px;
+      background: var(--good-soft); color: var(--good); font-size: 13px; font-weight: 700;
+    }
 
     body.place-asp_b, body.place-so_eb { padding: 10px; }
     body.place-asp_b h1, body.place-so_eb h1 { font-size: 16px; }
@@ -260,12 +282,68 @@
   <div class="shell">
     <div class="hero">
       <div class="hero-left">
-        <div class="kicker">Closed history</div>
+        <div class="kicker">Dominion Funding sim</div>
         <h1>Last 50 trades</h1>
-        <div class="sub">Net P/L · win rate · profit factor · deal list</div>
+        <div class="sub">Challenge rules on future closes · last-50 stats</div>
         <div id="conn" class="conn"><span class="dot off" id="connDot"></span><span id="connText">Connecting…</span></div>
       </div>
       <div id="status" class="badge">WAITING</div>
+    </div>
+
+    <div class="card" style="margin-bottom:10px">
+      <div class="progress-head">
+        <div>
+          <div class="label">Simulate a challenge</div>
+          <div id="chTitle" class="value sm">Pick a Dominion plan</div>
+        </div>
+        <div id="chBadge" class="pct-pill">OFF</div>
+      </div>
+      <div class="pickers">
+        <select id="chProgram"></select>
+        <select id="chSize"></select>
+      </div>
+      <div class="rule-pills" id="chPills"></div>
+      <div class="progress-head" style="margin-top:12px">
+        <div>
+          <div class="label">Profit target</div>
+          <div id="chProfit" class="value sm">—</div>
+        </div>
+        <div id="chProfitPct" class="pct-pill">0%</div>
+      </div>
+      <div class="bar good"><span id="chProfitBar"></span></div>
+      <div class="row"><span id="chProfitLeft">—</span><span id="chPhase">Phase 1</span></div>
+
+      <div class="progress-head" style="margin-top:12px">
+        <div>
+          <div class="label">Daily loss (20:55 UTC)</div>
+          <div id="chDaily" class="value sm">—</div>
+        </div>
+        <div id="chDailyPct" class="pct-pill">0%</div>
+      </div>
+      <div class="bar bad"><span id="chDailyBar"></span></div>
+      <div class="row"><span id="chDailyLeft">—</span><span>Used today</span></div>
+
+      <div class="progress-head" style="margin-top:12px">
+        <div>
+          <div class="label">Max loss</div>
+          <div id="chMax" class="value sm">—</div>
+        </div>
+        <div id="chMaxPct" class="pct-pill">0%</div>
+      </div>
+      <div class="bar warn"><span id="chMaxBar"></span></div>
+      <div class="row"><span id="chMaxLeft">—</span><span id="chMaxKind">From start</span></div>
+
+      <div class="progress-head" style="margin-top:12px">
+        <div>
+          <div class="label">Profitable days</div>
+          <div id="chDays" class="value sm">—</div>
+        </div>
+        <div id="chDaysPct" class="pct-pill">0/0</div>
+      </div>
+      <div class="bar"><span id="chDaysBar"></span></div>
+      <div class="row"><span id="chDaysLeft">+0.5% vs prior EOD high</span><span>20:55 UTC</span></div>
+      <div id="chAlert"></div>
+      <div class="hint" id="chHint">Only closes after you select a plan count. Changing plan or size resets the sim.</div>
     </div>
 
     <div class="grid">
@@ -458,8 +536,252 @@
     let lastAccount = null;
     let symbolNames = new Map();
     let trades = [];
+    let allTrades = [];
     let listFilter = "all";
     let loadingDeals = false;
+
+    const SIZES = [7500, 12500, 25000, 50000, 100000];
+    const PROGRAMS = {
+      lite: {
+        name: "1 Step Lite",
+        targetPct: 10, dailyPct: 4, maxPct: 6, maxType: "static",
+        minDays: 4, news: "News window restricted", overnight: true, weekend: true,
+        note: "FX 1:30 · overnight/weekend flatten",
+      },
+      standard1: {
+        name: "1 Step Standard",
+        targetPct: 10, dailyPct: 4, maxPct: 6, maxType: "static",
+        minDays: 5, news: "News window restricted", overnight: false, weekend: false,
+        note: "FX 1:50 · 10% target · 6% max",
+      },
+      swing1: {
+        name: "1 Step Swing",
+        targetPct: 10, dailyPct: 4, maxPct: 6, maxType: "static",
+        minDays: 5, news: "News trading allowed", overnight: false, weekend: false,
+        note: "FX 1:30 · news allowed",
+      },
+      standard2: {
+        name: "2 Step Standard",
+        phases: [
+          { name: "Phase 1", targetPct: 8, minDays: 4 },
+          { name: "Phase 2", targetPct: 5, minDays: 4 },
+        ],
+        dailyPct: 5, maxPct: 8, maxType: "static",
+        news: "News window restricted", overnight: true, weekend: true,
+        note: "8% then 5% · 5% daily · 8% max",
+      },
+      swing2: {
+        name: "2 Step Swing",
+        phases: [
+          { name: "Phase 1", targetPct: 8, minDays: 4 },
+          { name: "Phase 2", targetPct: 5, minDays: 5 },
+        ],
+        dailyPct: 5, maxPct: 8, maxType: "static",
+        news: "News trading allowed", overnight: false, weekend: false,
+        note: "8% then 5% · news allowed",
+      },
+      instant: {
+        name: "Instant (Master)",
+        targetPct: 0, dailyPct: 3, maxPct: 5, maxType: "trailing",
+        minDays: 8, rollingDays: 30,
+        news: "News window restricted", overnight: false, weekend: true,
+        note: "No profit target · 3% daily · 5% trailing DD",
+      },
+    };
+
+    function defaultChallenge() {
+      return { program: "standard1", size: 50000, startedAt: Date.now(), phase: 0 };
+    }
+    function loadChallenge() {
+      try {
+        const raw = JSON.parse(localStorage.getItem("dominionChallenge") || "null");
+        if (!raw || !PROGRAMS[raw.program] || !SIZES.includes(Number(raw.size))) return defaultChallenge();
+        return { program: raw.program, size: Number(raw.size), startedAt: Number(raw.startedAt) || Date.now(), phase: Number(raw.phase) || 0 };
+      } catch { return defaultChallenge(); }
+    }
+    function saveChallenge(ch) { localStorage.setItem("dominionChallenge", JSON.stringify(ch)); }
+    let challenge = loadChallenge();
+
+    function dominionDayEnd(ms) {
+      const d = new Date(ms);
+      const end = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 20, 55, 0, 0);
+      return ms < end ? end : end + 86400000;
+    }
+    function phaseOf(prog, idx) {
+      if (prog.phases) return prog.phases[Math.min(idx, prog.phases.length - 1)];
+      return { name: "Phase 1", targetPct: prog.targetPct, minDays: prog.minDays };
+    }
+
+    function evalChallenge(rows, floating, now) {
+      const prog = PROGRAMS[challenge.program];
+      const phase = phaseOf(prog, challenge.phase);
+      const initial = challenge.size;
+      const start = challenge.startedAt;
+      const dailyLimit = initial * prog.dailyPct / 100;
+      const minStep = initial * 0.005;
+      const closes = rows.filter((t) => t.ts >= start).sort((a, b) => a.ts - b.ts);
+      let bal = initial;
+      let minEq = initial + (floating || 0);
+      let fail = null;
+      const eod = new Map();
+      for (const t of closes) {
+        bal += t.net;
+        const eq = bal;
+        if (eq < minEq) minEq = eq;
+        const dayEnd = dominionDayEnd(t.ts);
+        eod.set(dayEnd, bal);
+        const prevEnds = [...eod.keys()].filter((k) => k < dayEnd).sort((a, b) => a - b);
+        const prevEod = prevEnds.length ? eod.get(prevEnds[prevEnds.length - 1]) : initial;
+        const dailyFloor = prevEod - dailyLimit;
+        if (eq < dailyFloor - 1e-8) fail = fail || { rule: "Daily loss", detail: `Equity ${eq.toFixed(2)} below ${dailyFloor.toFixed(2)}` };
+        let maxFloor;
+        if (prog.maxType === "trailing") {
+          const highEod = Math.max(initial, ...[...eod.values()]);
+          maxFloor = Math.min(initial, highEod - initial * prog.maxPct / 100);
+        } else {
+          maxFloor = initial * (1 - prog.maxPct / 100);
+        }
+        if (eq < maxFloor - 1e-8) fail = fail || { rule: "Max loss", detail: `Equity ${eq.toFixed(2)} below ${maxFloor.toFixed(2)}` };
+      }
+      const equity = bal + (floating || 0);
+      if (equity < minEq) minEq = equity;
+      const lastCompleteEnd = dominionDayEnd(now) - 86400000;
+      const ends = [...eod.keys()].sort((a, b) => a - b);
+      const eodAt = (when) => {
+        const prior = ends.filter((k) => k <= when);
+        return prior.length ? eod.get(prior[prior.length - 1]) : initial;
+      };
+      const yEod = eodAt(lastCompleteEnd);
+      const dailyFloorNow = yEod - dailyLimit;
+      if (equity < dailyFloorNow - 1e-8) fail = fail || { rule: "Daily loss", detail: `Live equity below today's floor` };
+      let maxFloorNow;
+      if (prog.maxType === "trailing") {
+        const completed = ends.filter((k) => k <= lastCompleteEnd);
+        const highEod = Math.max(initial, ...(completed.length ? completed.map((k) => eod.get(k)) : [initial]));
+        maxFloorNow = Math.min(initial, highEod - initial * prog.maxPct / 100);
+      } else {
+        maxFloorNow = initial * (1 - prog.maxPct / 100);
+      }
+      if (equity < maxFloorNow - 1e-8) fail = fail || { rule: "Max loss", detail: `Live equity below max-loss floor` };
+
+      const completeEnds = ends.filter((k) => k <= lastCompleteEnd).sort((a, b) => a - b);
+      let high = initial, profitDays = 0;
+      const dayWindow = prog.rollingDays ? now - prog.rollingDays * 86400000 : 0;
+      for (const k of completeEnds) {
+        if (dayWindow && k < dayWindow) continue;
+        const b = eod.get(k);
+        if (b >= high + minStep - 1e-8) profitDays++;
+        if (b > high) high = b;
+      }
+      const target = initial * (phase.targetPct || 0) / 100;
+      const profit = bal - initial;
+      const dailyUsed = Math.max(0, yEod - Math.min(equity, yEod));
+      const maxUsed = Math.max(0, initial - minEq);
+      const maxRoom = initial - maxFloorNow;
+      const open = Math.abs(floating || 0) > 0.5;
+      const daysNeed = phase.minDays || prog.minDays || 0;
+      let status = "live";
+      if (fail) status = "failed";
+      else if (phase.targetPct > 0 && profit >= target - 1e-8 && !open && profitDays >= daysNeed) status = "passed";
+      else if (phase.targetPct === 0 && !fail) status = "live";
+      return {
+        prog, phase, initial, closes: closes.length, bal, equity, profit, target,
+        dailyUsed, dailyLimit, dailyFloorNow, maxUsed, maxRoom, maxFloorNow,
+        profitDays, daysNeed, open, fail, status, start,
+      };
+    }
+
+    function renderChallenge() {
+      const prog = PROGRAMS[challenge.program];
+      const phase = phaseOf(prog, challenge.phase);
+      const floating = lastAccount?.floating ?? 0;
+      const ev = evalChallenge(allTrades.length ? allTrades : trades, floating, Date.now());
+      $("chTitle").textContent = `${prog.name} · ${money(challenge.size, currency || "USD")}`;
+      $("chPhase").textContent = phase.name + (prog.phases ? ` (${challenge.phase + 1}/${prog.phases.length})` : "");
+      $("chPills").innerHTML = [
+        `${phase.targetPct ? phase.targetPct + "% target" : "No target"}`,
+        `${prog.dailyPct}% daily`,
+        `${prog.maxPct}% ${prog.maxType === "trailing" ? "trailing" : "static"} max`,
+        `${ev.daysNeed} profitable days`,
+        prog.news,
+        prog.overnight ? "No overnight 20:30–22:00 UTC" : null,
+        prog.weekend ? "Flat by Friday 20:30 UTC" : null,
+      ].filter(Boolean).map((t) => `<span class="pill">${t}</span>`).join("");
+
+      const badge = $("chBadge");
+      badge.className = "pct-pill";
+      if (ev.status === "failed") { badge.textContent = "FAILED"; badge.style.color = "var(--bad)"; }
+      else if (ev.status === "passed") { badge.textContent = "PASSED"; badge.style.color = "var(--good)"; }
+      else { badge.textContent = "LIVE"; badge.style.color = "var(--accent)"; }
+
+      const tgt = ev.target || 1;
+      const pPct = ev.target ? Math.max(0, Math.min(100, (ev.profit / tgt) * 100)) : 0;
+      $("chProfit").textContent = ev.target ? `${money(ev.profit, currency)} / ${money(ev.target, currency)}` : "No profit target";
+      $("chProfitPct").textContent = ev.target ? `${pPct.toFixed(0)}%` : "—";
+      $("chProfitBar").style.width = `${pPct}%`;
+      $("chProfitLeft").textContent = ev.closes ? `${ev.closes} close${ev.closes === 1 ? "" : "s"} since start` : "No closes since this challenge started";
+      setPlClass($("chProfit"), ev.profit);
+
+      const dPct = Math.max(0, Math.min(100, (ev.dailyUsed / ev.dailyLimit) * 100));
+      $("chDaily").textContent = `${money(ev.dailyUsed, currency)} / ${money(ev.dailyLimit, currency)}`;
+      $("chDailyPct").textContent = `${dPct.toFixed(0)}%`;
+      $("chDailyBar").style.width = `${dPct}%`;
+      $("chDailyLeft").textContent = `Floor ${money(ev.dailyFloorNow, currency)}`;
+
+      const mPct = ev.maxRoom > 0 ? Math.max(0, Math.min(100, (ev.maxUsed / ev.maxRoom) * 100)) : 0;
+      $("chMax").textContent = `${money(ev.maxUsed, currency)} used`;
+      $("chMaxPct").textContent = `${mPct.toFixed(0)}%`;
+      $("chMaxBar").style.width = `${mPct}%`;
+      $("chMaxLeft").textContent = `Must stay above ${money(ev.maxFloorNow, currency)}`;
+      $("chMaxKind").textContent = prog.maxType === "trailing" ? "Trailing, cap at start" : "Static from start";
+
+      const dayPct = ev.daysNeed ? Math.max(0, Math.min(100, (ev.profitDays / ev.daysNeed) * 100)) : 0;
+      $("chDays").textContent = `${ev.profitDays} / ${ev.daysNeed}`;
+      $("chDaysPct").textContent = `${ev.profitDays}/${ev.daysNeed}`;
+      $("chDaysBar").style.width = `${dayPct}%`;
+      $("chDaysBar").style.background = "linear-gradient(90deg, #2563eb, #93c5fd)";
+      $("chDaysLeft").textContent = prog.rollingDays
+        ? `${ev.profitDays} qualifying days in last ${prog.rollingDays}`
+        : "+0.5% vs prior EOD high";
+
+      const alert = $("chAlert");
+      if (ev.status === "failed") {
+        alert.className = "fail-box";
+        alert.textContent = `Breach: ${ev.fail.rule}. ${ev.fail.detail}. Challenge stays failed until you pick another plan or size.`;
+      } else if (ev.status === "passed") {
+        alert.className = "pass-box";
+        const more = prog.phases && challenge.phase + 1 < prog.phases.length;
+        alert.textContent = more
+          ? `${phase.name} passed (flat and target hit). Phase 2 starts now — only new closes count.`
+          : `${phase.name} passed. Target hit, book is flat, profitable-day count met.`;
+        if (more) {
+          challenge.phase += 1;
+          challenge.startedAt = Date.now();
+          saveChallenge(challenge);
+        }
+      } else {
+        alert.className = "";
+        alert.textContent = "";
+      }
+      const started = new Date(challenge.startedAt);
+      $("chHint").textContent = `Started ${started.toISOString().slice(0, 16).replace("T", " ")}Z · ${prog.note}. Changing plan or size resets.`;
+    }
+
+    function fillChallengeSelects() {
+      $("chProgram").innerHTML = Object.entries(PROGRAMS).map(([id, p]) =>
+        `<option value="${id}" ${id === challenge.program ? "selected" : ""}>${p.name}</option>`
+      ).join("");
+      $("chSize").innerHTML = SIZES.map((n) =>
+        `<option value="${n}" ${n === challenge.size ? "selected" : ""}>${n.toLocaleString()} USD</option>`
+      ).join("");
+    }
+    function onChallengeChange() {
+      const program = $("chProgram").value;
+      const size = Number($("chSize").value);
+      challenge = { program, size, startedAt: Date.now(), phase: 0 };
+      saveChallenge(challenge);
+      render();
+    }
 
     function pick(obj, keys, fallback = 0) {
       if (!obj) return fallback;
@@ -755,6 +1077,7 @@
       sparkPath(trades);
       $("listCaption").textContent = `${filteredTrades().length} shown`;
       renderList();
+      renderChallenge();
 
       const st = $("status");
       st.className = "badge";
@@ -820,6 +1143,7 @@
       try {
         const all = await loadDealHistory();
         all.sort((a, b) => b.ts - a.ts);
+        allTrades = all;
         trades = all.slice(0, TRADE_LIMIT);
         for (const t of trades) {
           if (symbolNames.has(t.symbolId)) t.symbol = symbolNames.get(t.symbolId);
@@ -838,6 +1162,9 @@
       await refreshDeals();
     }
 
+    fillChallengeSelects();
+    $("chProgram").onchange = onChallengeChange;
+    $("chSize").onchange = onChallengeChange;
     $("btnRefresh").onclick = () => refreshAll();
     $("chips").onclick = (ev) => {
       const btn = ev.target.closest("[data-filter]");
@@ -880,6 +1207,7 @@
         };
         currency = "USD";
         trades = demoTrades();
+        allTrades = trades;
         render();
         console.warn(err);
         return [];
