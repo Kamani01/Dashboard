@@ -401,6 +401,21 @@
         <div id="avgWl" class="value sm">—</div>
       </div>
       <div class="card metric">
+        <div class="label">Sharpe ratio</div>
+        <div id="sharpe" class="value sm">—</div>
+        <div class="hint" id="sharpeHint">Mean close ÷ σ, annualised</div>
+      </div>
+      <div class="card metric">
+        <div class="label">Profit recency</div>
+        <div id="recency" class="value sm">—</div>
+        <div class="hint" id="recencyHint">Newest third of this sample</div>
+      </div>
+      <div class="card metric">
+        <div class="label">Equity smoothness (R²)</div>
+        <div id="r2" class="value sm">—</div>
+        <div class="hint" id="r2Hint">1.00 = a straight equity line</div>
+      </div>
+      <div class="card metric">
         <div class="label">Best trade</div>
         <div id="best" class="value sm">—</div>
       </div>
@@ -962,6 +977,7 @@
         }
       }
       const pf = lossSum < 0 ? winSum / Math.abs(lossSum) : (winSum > 0 ? Infinity : 0);
+      const extra = curveQuality(rows);
       return {
         n, net, wins, losses, even,
         winRate: n ? wins / n : 0,
@@ -969,7 +985,43 @@
         avgLoss: losses ? lossSum / losses : 0,
         pf, best, worst, longPl, shortPl, streak, streakKind,
         expectancy: n ? net / n : 0,
+        ...extra,
       };
+    }
+
+    function curveQuality(rows) {
+      const n = rows.length;
+      const empty = { sharpe: null, recency: null, recentNet: 0, recentN: 0, r2: null, slope: 0 };
+      if (n < 3) return empty;
+      const chrono = [...rows].sort((a, b) => a.ts - b.ts);
+      const nets = chrono.map((t) => t.net);
+      const mean = nets.reduce((a, b) => a + b, 0) / n;
+      let varSum = 0;
+      for (const x of nets) varSum += (x - mean) ** 2;
+      const std = Math.sqrt(varSum / (n - 1));
+      const rawSharpe = std > 1e-12 ? mean / std : (mean > 0 ? Infinity : mean < 0 ? -Infinity : 0);
+      const span = chrono[n - 1].ts - chrono[0].ts;
+      const years = span > 0 ? span / (365.25 * 86400000) : 0;
+      const tpy = years > 1 / 52 ? n / years : n;
+      const sharpe = Number.isFinite(rawSharpe) ? rawSharpe * Math.sqrt(Math.min(Math.max(tpy, 1), 500)) : rawSharpe;
+
+      const recentN = Math.max(1, Math.ceil(n / 3));
+      const recentNet = chrono.slice(-recentN).reduce((a, t) => a + t.net, 0);
+      const net = nets.reduce((a, b) => a + b, 0);
+      const recency = Math.abs(net) > 1e-9 ? recentNet / net : null;
+
+      let run = 0;
+      const y = nets.map((v) => (run += v));
+      const xMean = (n - 1) / 2;
+      const yMean = y.reduce((a, b) => a + b, 0) / n;
+      let sxx = 0, sxy = 0, syy = 0;
+      for (let i = 0; i < n; i++) {
+        const dx = i - xMean, dy = y[i] - yMean;
+        sxx += dx * dx; sxy += dx * dy; syy += dy * dy;
+      }
+      const slope = sxx > 0 ? sxy / sxx : 0;
+      const r2 = syy > 1e-12 && sxx > 1e-12 ? Math.min(1, (sxy * sxy) / (sxx * syy)) : 0;
+      return { sharpe, recency, recentNet, recentN, r2, slope };
     }
 
     function sparkPath(rows) {
@@ -1086,6 +1138,39 @@
 
       $("pf").textContent = !s.n ? "—" : !Number.isFinite(s.pf) ? "∞" : s.pf.toFixed(2);
       $("avgWl").textContent = s.n ? `${money(s.avgWin, currency)} / ${money(s.avgLoss, currency)}` : "—";
+
+      if (s.sharpe == null) {
+        $("sharpe").textContent = "—";
+        $("sharpe").classList.remove("pos", "neg");
+        $("sharpeHint").textContent = "Need at least 3 closes";
+      } else {
+        $("sharpe").textContent = Number.isFinite(s.sharpe) ? s.sharpe.toFixed(2) : (s.sharpe > 0 ? "∞" : "−∞");
+        setPlClass($("sharpe"), s.sharpe);
+        $("sharpeHint").textContent = s.sharpe >= 1 ? "Strong vs this sample’s noise" : s.sharpe >= 0 ? "Weak / noisy edge" : "Losing vs its own volatility";
+      }
+
+      if (s.recency == null) {
+        $("recency").textContent = "—";
+        $("recency").classList.remove("pos", "neg");
+        $("recencyHint").textContent = "Newest third of this sample";
+      } else {
+        const pct = s.recency * 100;
+        $("recency").textContent = `${pct >= 0 ? "" : "−"}${Math.abs(pct).toFixed(0)}%`;
+        setPlClass($("recency"), s.recentNet);
+        $("recencyHint").textContent = `Last ${s.recentN}: ${s.recentNet >= 0 ? "+" : ""}${money(s.recentNet, currency)} of sample net`;
+      }
+
+      if (s.r2 == null) {
+        $("r2").textContent = "—";
+        $("r2").classList.remove("pos", "neg");
+        $("r2Hint").textContent = "1.00 = a straight equity line";
+      } else {
+        $("r2").textContent = s.r2.toFixed(2);
+        setPlClass($("r2"), s.r2 >= 0.7 && s.slope > 0 ? 1 : s.slope < 0 ? -1 : 0);
+        $("r2Hint").textContent = s.slope > 0
+          ? (s.r2 >= 0.7 ? "Smooth uptrend" : "Uptrend, but choppy")
+          : (s.r2 >= 0.7 ? "Smooth downtrend" : "Choppy / no clear line");
+      }
       $("best").textContent = s.best ? money(s.best.net, currency) : "—";
       setPlClass($("best"), s.best?.net ?? 0);
       $("worst").textContent = s.worst ? money(s.worst.net, currency) : "—";
