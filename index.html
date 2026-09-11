@@ -338,7 +338,7 @@
         <div class="progress-head">
           <div>
             <div class="label">Monte Carlo (spaghetti)</div>
-            <div class="hint" style="margin-top:4px">Same 50 P/Ls, shuffled order · 80 paths</div>
+            <div class="hint" style="margin-top:4px">Frozen after first load · reload page to reshuffle</div>
           </div>
           <div id="mcEnd" class="pct-pill">—</div>
         </div>
@@ -348,12 +348,23 @@
       <div class="card wide">
         <div class="progress-head">
           <div>
-            <div class="label">MAE / MFE scatter</div>
-            <div class="hint" style="margin-top:4px">X = adverse · Y = favorable</div>
+            <div class="label">Pending order fill efficiency</div>
+            <div class="hint" style="margin-top:4px">Filled volume ÷ requested volume</div>
           </div>
-          <div id="maeHint" class="pct-pill">Close path</div>
+          <div id="fillPct" class="pct-pill">—</div>
         </div>
-        <svg id="maeMfe" class="spark tall" viewBox="0 0 320 110" preserveAspectRatio="none" aria-hidden="true"></svg>
+        <svg id="fillGauge" class="spark" viewBox="0 0 320 120" aria-hidden="true"></svg>
+      </div>
+
+      <div class="card wide">
+        <div class="progress-head">
+          <div>
+            <div class="label">Dynamic parameter decay</div>
+            <div class="hint" style="margin-top:4px">Rolling mean P/L vs exponential fit</div>
+          </div>
+          <div id="decayHint" class="pct-pill">—</div>
+        </div>
+        <svg id="decayChart" class="spark tall" viewBox="0 0 320 110" preserveAspectRatio="none" aria-hidden="true"></svg>
       </div>
 
       <div class="card wide">
@@ -755,6 +766,12 @@
         exit: Number(d.executionPrice ?? d.ExecutionPrice ?? 0),
         net: gross + swap + commission + conv,
         gross, swap, commission, ts, openTs, open: false,
+        fillEff: (() => {
+          const req = numish(d.volume ?? d.Volume ?? d.requestedVolume ?? close.closedVolume);
+          const fil = numish(close.closedVolume ?? d.filledVolume ?? d.FilledVolume ?? d.volume);
+          if (!Number.isFinite(req) || req <= 0 || !Number.isFinite(fil)) return 1;
+          return Math.max(0, Math.min(1.5, fil / req));
+        })(),
       };
     }
 
@@ -1051,13 +1068,38 @@
         ` stroke-dasharray="${dash}" transform="rotate(-90 50 50)"/>`;
     }
 
-    function drawMonteCarlo(rows) {
+    let mcFrozen = null;
+
+    function paintMonteCarlo(pack) {
       const el = $("mcChart");
-      if (!el) return;
+      if (!el || !pack) return;
+      const { curves, n, min, max, med, end } = pack;
+      const W = 320, H = 110, pad = 6;
+      const span = max - min || 1;
+      const x = (i) => pad + (i / Math.max(1, n - 1)) * (W - pad * 2);
+      const y = (v) => H - pad - ((v - min) / span) * (H - pad * 2);
+      const zeroY = y(0);
+      const lines = curves.map((c) => {
+        const d = c.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+        return `<path d="${d}" fill="none" stroke="var(--accent)" stroke-width="0.7" opacity="0.22"/>`;
+      }).join("");
+      const md = med.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+      const mcol = end >= 0 ? "var(--good)" : "var(--bad)";
+      el.innerHTML =
+        `<line class="spark-zero" x1="${pad}" x2="${W - pad}" y1="${zeroY.toFixed(1)}" y2="${zeroY.toFixed(1)}"/>` +
+        lines +
+        `<path d="${md}" fill="none" stroke="${mcol}" stroke-width="2.2"/>`;
+      if ($("mcEnd")) $("mcEnd").textContent = `median end ${axisMoney(end)} · frozen`;
+    }
+
+    function drawMonteCarlo(rows) {
+      if (mcFrozen) {
+        paintMonteCarlo(mcFrozen);
+        return;
+      }
       const nets = [...rows].slice().reverse().map((t) => t.net);
       const n = nets.length;
-      const W = 320, H = 110, pad = 6;
-      if (!n) { el.innerHTML = ""; return; }
+      if (!n) return;
       const paths = 80;
       const curves = [];
       let gMin = 0, gMax = 0;
@@ -1071,58 +1113,87 @@
         const c = bag.map((v) => { run += v; if (run < gMin) gMin = run; if (run > gMax) gMax = run; return run; });
         curves.push(c);
       }
-      const min = Math.min(0, gMin);
-      const max = Math.max(0, gMax);
-      const span = max - min || 1;
-      const x = (i) => pad + (i / Math.max(1, n - 1)) * (W - pad * 2);
-      const y = (v) => H - pad - ((v - min) / span) * (H - pad * 2);
-      const zeroY = y(0);
-      const lines = curves.map((c) => {
-        const d = c.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
-        return `<path d="${d}" fill="none" stroke="var(--accent)" stroke-width="0.7" opacity="0.22"/>`;
-      }).join("");
       const med = [];
       for (let i = 0; i < n; i++) {
         const col = curves.map((c) => c[i]).sort((a, b) => a - b);
         med.push(col[Math.floor(col.length / 2)]);
       }
-      const md = med.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
-      const end = med[med.length - 1] || 0;
-      const mcol = end >= 0 ? "var(--good)" : "var(--bad)";
-      el.innerHTML =
-        `<line class="spark-zero" x1="${pad}" x2="${W - pad}" y1="${zeroY.toFixed(1)}" y2="${zeroY.toFixed(1)}"/>` +
-        lines +
-        `<path d="${md}" fill="none" stroke="${mcol}" stroke-width="2.2"/>`;
-      if ($("mcEnd")) $("mcEnd").textContent = `median end ${axisMoney(end)}`;
+      mcFrozen = {
+        curves, n,
+        min: Math.min(0, gMin),
+        max: Math.max(0, gMax),
+        med,
+        end: med[med.length - 1] || 0,
+      };
+      paintMonteCarlo(mcFrozen);
     }
 
-    function drawMaeMfe(rows) {
-      const el = $("maeMfe");
+    function drawFillGauge(rows) {
+      const el = $("fillGauge");
       if (!el) return;
-      const W = 320, H = 110, pad = 18;
-      if (!rows.length) { el.innerHTML = ""; return; }
-      const pts = rows.map((t) => ({
-        mae: Math.max(0, -t.net),
-        mfe: Math.max(0, t.net),
-        win: t.net > 0,
-      }));
-      const maxX = Math.max(...pts.map((p) => p.mae), 1);
-      const maxY = Math.max(...pts.map((p) => p.mfe), 1);
-      const max = Math.max(maxX, maxY);
-      const x = (v) => pad + (v / max) * (W - pad * 2);
-      const y = (v) => H - pad - (v / max) * (H - pad * 2);
-      const dots = pts.map((p) =>
-        `<circle cx="${x(p.mae).toFixed(1)}" cy="${y(p.mfe).toFixed(1)}" r="2.6" fill="${p.win ? "var(--good)" : "var(--bad)"}" opacity="0.85"/>`
-      ).join("");
-      const diag = `M${x(0).toFixed(1)},${y(0).toFixed(1)} L${x(max).toFixed(1)},${y(max).toFixed(1)}`;
+      const vals = rows.map((t) => (Number.isFinite(t.fillEff) ? t.fillEff : 1));
+      const avg = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
+      const pct = Math.max(0, Math.min(1.2, avg));
+      const show = Math.max(0, Math.min(1, pct));
+      const cx = 160, cy = 100, r = 72;
+      const start = Math.PI, end = 2 * Math.PI;
+      const a = start + show * (end - start);
+      const sx = cx + r * Math.cos(start), sy = cy + r * Math.sin(start);
+      const ex = cx + r * Math.cos(a), ey = cy + r * Math.sin(a);
+      const bgx = cx + r * Math.cos(end), bgy = cy + r * Math.sin(end);
+      const color = show >= 0.95 ? "var(--good)" : show >= 0.8 ? "var(--warn)" : "var(--bad)";
+      const arc = (x1, y1, x2, y2, large) =>
+        `M ${x1.toFixed(1)} ${y1.toFixed(1)} A ${r} ${r} 0 ${large} 1 ${x2.toFixed(1)} ${y2.toFixed(1)}`;
       el.innerHTML =
-        `<text class="axis" x="${pad}" y="${H - 4}">MAE</text>` +
-        `<text class="axis" x="4" y="${pad}">MFE</text>` +
-        `<line class="spark-zero" x1="${pad}" x2="${W - pad}" y1="${y(0).toFixed(1)}" y2="${y(0).toFixed(1)}"/>` +
-        `<line class="spark-zero" x1="${x(0).toFixed(1)}" x2="${x(0).toFixed(1)}" y1="${pad}" y2="${H - pad}"/>` +
-        `<path d="${diag}" fill="none" stroke="var(--muted)" stroke-width="1" stroke-dasharray="3 3" opacity="0.5"/>` +
-        dots;
-      if ($("maeHint")) $("maeHint").textContent = "From close P/L";
+        `<path d="${arc(sx, sy, bgx, bgy, 0)}" fill="none" stroke="var(--track)" stroke-width="14" stroke-linecap="round"/>` +
+        `<path d="${arc(sx, sy, ex, ey, 0)}" fill="none" stroke="${color}" stroke-width="14" stroke-linecap="round"/>` +
+        `<text x="${cx}" y="58" text-anchor="middle" fill="var(--text)" font-size="28" font-weight="800">${(show * 100).toFixed(0)}%</text>` +
+        `<text class="axis" x="${cx}" y="78" text-anchor="middle">fill efficiency</text>` +
+        `<text class="axis" x="88" y="118">0</text>` +
+        `<text class="axis" x="220" y="118">100</text>`;
+      if ($("fillPct")) {
+        $("fillPct").textContent = `${(show * 100).toFixed(0)}%`;
+        $("fillPct").className = "pct-pill" + (show >= 0.95 ? " ok" : show >= 0.8 ? " warn" : " bad");
+      }
+    }
+
+    function drawDecay(rows) {
+      const el = $("decayChart");
+      if (!el) return;
+      const chrono = [...rows].slice().reverse();
+      const n = chrono.length;
+      const W = 320, H = 110, pad = 8;
+      if (n < 3) { el.innerHTML = ""; return; }
+      const w = Math.min(8, Math.max(3, Math.floor(n / 5) || 3));
+      const roll = [];
+      for (let i = 0; i < n; i++) {
+        const slice = chrono.slice(Math.max(0, i - w + 1), i + 1);
+        roll.push(slice.reduce((s, t) => s + t.net, 0) / slice.length);
+      }
+      const kHead = Math.max(3, Math.floor(n / 5));
+      const first = roll.slice(0, kHead).reduce((a, b) => a + b, 0) / kHead;
+      const last = roll.slice(-kHead).reduce((a, b) => a + b, 0) / kHead;
+      const C = Math.min(...roll);
+      const A = first - C;
+      let k = 0;
+      if (A > 1e-9 && last > C) k = -Math.log(Math.max(1e-6, (last - C) / A)) / Math.max(1, n - 1);
+      if (!Number.isFinite(k) || k < 0) k = 0;
+      const fit = roll.map((_, i) => A * Math.exp(-k * i) + C);
+      const min = Math.min(0, ...roll, ...fit);
+      const max = Math.max(0, ...roll, ...fit);
+      const span = max - min || 1;
+      const x = (i) => pad + (i / Math.max(1, n - 1)) * (W - pad * 2);
+      const y = (v) => H - pad - ((v - min) / span) * (H - pad * 2);
+      const zeroY = y(0);
+      const dRoll = roll.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+      const dFit = fit.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+      el.innerHTML =
+        `<line class="spark-zero" x1="${pad}" x2="${W - pad}" y1="${zeroY.toFixed(1)}" y2="${zeroY.toFixed(1)}"/>` +
+        `<path d="${dRoll}" fill="none" stroke="var(--accent)" stroke-width="2"/>` +
+        `<path d="${dFit}" fill="none" stroke="var(--warn)" stroke-width="1.8" stroke-dasharray="4 3"/>`;
+      if ($("decayHint")) {
+        $("decayHint").textContent = k > 0.002 ? "edge decaying" : last >= first ? "edge holding" : "soft decay";
+      }
     }
 
     function drawDrawdown(rows) {
@@ -1293,7 +1364,8 @@
       }
       sparkPath(trades);
       drawMonteCarlo(trades);
-      drawMaeMfe(trades);
+      drawFillGauge(trades);
+      drawDecay(trades);
       drawDrawdown(trades);
       $("listCaption").textContent = `${filteredTrades().length} shown`;
       renderList();
