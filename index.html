@@ -187,12 +187,13 @@
     }
 
     .spark {
-      width: 100%; height: 110px; margin-top: 10px; display: block;
+      width: 100%; height: 140px; margin-top: 10px; display: block;
     }
-    .spark.tall { height: 128px; }
-    .spark-zero { stroke: var(--muted); stroke-dasharray: 3 4; opacity: 0.45; }
+    .spark.tall { height: 160px; }
+    .spark-zero { stroke: var(--muted); stroke-dasharray: 3 4; opacity: 0.55; }
     .spark-line { fill: none; stroke-width: 2.2; stroke-linejoin: round; stroke-linecap: round; }
-    .spark-fill { opacity: 0.16; }
+    .spark-fill { opacity: 0.18; }
+    .axis { fill: var(--muted); font-size: 8px; font-family: inherit; }
     .win-row { display: flex; align-items: center; gap: 16px; margin-top: 8px; }
     .donut { width: 88px; height: 88px; flex: 0 0 auto; }
     .win-big { font-size: 34px; font-weight: 800; letter-spacing: -0.04em; line-height: 1; }
@@ -300,12 +301,12 @@
       </div>
 
       <div class="card metric">
-        <div class="label">Net P/L</div>
+        <div class="label">Net P/L (last 50)</div>
         <div id="netPl" class="value">—</div>
       </div>
       <div class="card metric">
-        <div class="label">Floating P/L</div>
-        <div id="floatPl" class="value">—</div>
+        <div class="label">Avg win / loss</div>
+        <div id="avgWl" class="value sm">—</div>
       </div>
 
       <div class="card wide">
@@ -330,17 +331,29 @@
           </div>
           <div class="pct-pill">Oldest → newest</div>
         </div>
-        <svg id="spark" class="spark tall" viewBox="0 0 320 110" preserveAspectRatio="none" aria-hidden="true"></svg>
+        <svg id="spark" class="spark tall" viewBox="0 0 360 150" preserveAspectRatio="none" aria-hidden="true"></svg>
       </div>
 
       <div class="card wide">
         <div class="progress-head">
           <div>
-            <div class="label">P/L per trade</div>
-            <div class="hint" style="margin-top:4px">Green win · red loss</div>
+            <div class="label">P/L per close</div>
+            <div id="pnlScale" class="hint" style="margin-top:4px">Bar height = actual P/L</div>
           </div>
+          <div id="pnlRange" class="pct-pill">—</div>
         </div>
-        <svg id="pnlBars" class="spark" viewBox="0 0 320 110" preserveAspectRatio="none" aria-hidden="true"></svg>
+        <svg id="pnlBars" class="spark tall" viewBox="0 0 360 150" preserveAspectRatio="none" aria-hidden="true"></svg>
+      </div>
+
+      <div class="card wide">
+        <div class="progress-head">
+          <div>
+            <div class="label">Drawdown (underwater)</div>
+            <div id="ddCaption" class="value sm">—</div>
+          </div>
+          <div class="pct-pill">From peak in this 50</div>
+        </div>
+        <svg id="ddChart" class="spark" viewBox="0 0 360 140" preserveAspectRatio="none" aria-hidden="true"></svg>
       </div>
 
       <div class="card wide">
@@ -950,9 +963,22 @@
       return { sharpe, recency, recentNet, recentN, r2, slope, maxDd, maxDdPct, peak };
     }
 
+    function axisMoney(n) {
+      const a = Math.abs(n);
+      const sign = n < 0 ? "-" : "";
+      if (a >= 1000000) return sign + (a / 1000000).toFixed(1) + "m";
+      if (a >= 1000) return sign + (a / 1000).toFixed(a >= 10000 ? 0 : 1) + "k";
+      return sign + a.toFixed(a >= 100 ? 0 : 0);
+    }
+
+    function yScale(min, max, H, pad) {
+      const span = (max - min) || 1;
+      return (v) => H - pad - ((v - min) / span) * (H - pad * 2);
+    }
+
     function sparkPath(rows) {
       const svg = $("spark");
-      const W = 320, H = 110, pad = 6;
+      const W = 360, H = 150, padL = 40, padR = 8, padT = 10, padB = 16;
       if (!rows.length) { svg.innerHTML = ""; return; }
       const chrono = [...rows].sort((a, b) => a.ts - b.ts);
       let run = 0;
@@ -960,14 +986,17 @@
       const min = Math.min(0, ...pts);
       const max = Math.max(0, ...pts);
       const span = max - min || 1;
-      const x = (i) => pad + (i / Math.max(1, pts.length - 1)) * (W - pad * 2);
-      const y = (v) => H - pad - ((v - min) / span) * (H - pad * 2);
-      const zeroY = y(0);
-      const d = pts.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+      const yv = (v) => padT + (1 - (v - min) / span) * (H - padT - padB);
+      const x = (i) => padL + (i / Math.max(1, pts.length - 1)) * (W - padL - padR);
+      const zeroY = yv(0);
+      const d = pts.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${yv(v).toFixed(1)}`).join(" ");
       const fill = `${d} L${x(pts.length - 1).toFixed(1)},${zeroY.toFixed(1)} L${x(0).toFixed(1)},${zeroY.toFixed(1)} Z`;
       const color = pts[pts.length - 1] >= 0 ? "var(--good)" : "var(--bad)";
       svg.innerHTML =
-        `<line class="spark-zero" x1="${pad}" x2="${W - pad}" y1="${zeroY.toFixed(1)}" y2="${zeroY.toFixed(1)}" />` +
+        `<text class="axis" x="2" y="${yv(max) + 4}">${axisMoney(max)}</text>` +
+        `<text class="axis" x="2" y="${zeroY + 3}">0</text>` +
+        `<text class="axis" x="2" y="${yv(min) + 3}">${axisMoney(min)}</text>` +
+        `<line class="spark-zero" x1="${padL}" x2="${W - padR}" y1="${zeroY.toFixed(1)}" y2="${zeroY.toFixed(1)}" />` +
         `<path class="spark-fill" d="${fill}" fill="${color}"></path>` +
         `<path class="spark-line" d="${d}" stroke="${color}"></path>`;
     }
@@ -987,18 +1016,61 @@
       const el = $("pnlBars");
       if (!el) return;
       const chrono = [...rows].sort((a, b) => a.ts - b.ts);
-      const W = 320, H = 110, pad = 6;
+      const W = 360, H = 150, padL = 40, padR = 8, padT = 10, padB = 16;
       if (!chrono.length) { el.innerHTML = ""; return; }
-      const max = Math.max(...chrono.map((t) => Math.abs(t.net)), 1);
-      const bw = (W - pad * 2) / chrono.length;
-      const zero = H / 2;
+      const nets = chrono.map((t) => t.net);
+      const min = Math.min(0, ...nets);
+      const max = Math.max(0, ...nets);
+      const span = max - min || 1;
+      const yv = (v) => padT + (1 - (v - min) / span) * (H - padT - padB);
+      const n = chrono.length;
+      const inner = W - padL - padR;
+      const bw = inner / n;
+      const zeroY = yv(0);
       const rects = chrono.map((t, i) => {
-        const bh = (Math.abs(t.net) / max) * (H / 2 - 8);
-        const y = t.net >= 0 ? zero - bh : zero;
+        const y1 = yv(t.net);
+        const y = Math.min(y1, zeroY);
+        const h = Math.max(1.5, Math.abs(y1 - zeroY));
         const fill = t.net >= 0 ? "var(--good)" : "var(--bad)";
-        return `<rect x="${(pad + i * bw).toFixed(2)}" y="${y.toFixed(2)}" width="${Math.max(1.2, bw - 0.8).toFixed(2)}" height="${Math.max(0.5, bh).toFixed(2)}" fill="${fill}" rx="1"/>`;
+        return `<rect x="${(padL + i * bw + bw * 0.12).toFixed(2)}" y="${y.toFixed(2)}" width="${Math.max(1.4, bw * 0.76).toFixed(2)}" height="${h.toFixed(2)}" fill="${fill}" rx="1.2"/>`;
       }).join("");
-      el.innerHTML = `<line class="spark-zero" x1="${pad}" x2="${W - pad}" y1="${zero}" y2="${zero}"/>` + rects;
+      el.innerHTML =
+        `<text class="axis" x="2" y="${yv(max) + 4}">${axisMoney(max)}</text>` +
+        `<text class="axis" x="2" y="${zeroY + 3}">0</text>` +
+        `<text class="axis" x="2" y="${yv(min) + 3}">${axisMoney(min)}</text>` +
+        `<line class="spark-zero" x1="${padL}" x2="${W - padR}" y1="${zeroY.toFixed(1)}" y2="${zeroY.toFixed(1)}"/>` +
+        rects;
+      const hi = Math.max(...nets.map(Math.abs), 0);
+      if ($("pnlRange")) $("pnlRange").textContent = `scale ±${axisMoney(hi)}`;
+      if ($("pnlScale")) $("pnlScale").textContent = `Each bar is one close · tallest = ${axisMoney(hi)}`;
+    }
+
+    function drawDrawdown(rows) {
+      const el = $("ddChart");
+      if (!el) return;
+      const chrono = [...rows].sort((a, b) => a.ts - b.ts);
+      const W = 360, H = 140, padL = 40, padR = 8, padT = 10, padB = 16;
+      if (!chrono.length) { el.innerHTML = ""; return; }
+      let run = 0, peak = 0;
+      const dds = chrono.map((t) => {
+        run += t.net;
+        if (run > peak) peak = run;
+        return peak - run;
+      });
+      const maxDd = Math.max(...dds, 0);
+      const yv = (v) => padT + (v / (maxDd || 1)) * (H - padT - padB);
+      const x = (i) => padL + (i / Math.max(1, dds.length - 1)) * (W - padL - padR);
+      const d = dds.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${yv(v).toFixed(1)}`).join(" ");
+      const fill = `${d} L${x(dds.length - 1).toFixed(1)},${padT.toFixed(1)} L${x(0).toFixed(1)},${padT.toFixed(1)} Z`;
+      el.innerHTML =
+        `<text class="axis" x="2" y="${yv(maxDd) + 3}">-${axisMoney(maxDd)}</text>` +
+        `<text class="axis" x="2" y="${padT + 8}">0</text>` +
+        `<path class="spark-fill" d="${fill}" fill="var(--bad)"></path>` +
+        `<path class="spark-line" d="${d}" stroke="var(--bad)"></path>`;
+      if ($("ddCaption")) {
+        $("ddCaption").textContent = maxDd ? money(-maxDd, currency) : money(0, currency);
+        setPlClass($("ddCaption"), maxDd ? -1 : 0);
+      }
     }
 
     function filteredTrades() {
@@ -1070,15 +1142,13 @@
       if (a && a.balance != null) {
         $("balance").textContent = money(a.balance, currency);
         $("equity").textContent = money(a.equity ?? a.balance, currency);
-        const floating = a.floating ?? ((a.equity ?? a.balance) - a.balance);
-        $("floatPl").textContent = money(floating, currency);
-        setPlClass($("floatPl"), floating);
         $("openPos").textContent = String(openTrades.length || a.openPositions || 0);
       }
 
       const s = statsOf(trades);
       $("netPl").textContent = money(s.net, currency);
       setPlClass($("netPl"), s.net);
+      $("avgWl").textContent = s.n ? `${money(s.avgWin, currency)} / ${money(s.avgLoss, currency)}` : "—";
 
       $("winValue").textContent = s.n ? `${s.wins}W · ${s.losses}L${s.even ? ` · ${s.even}E` : ""}` : "—";
       $("winPct").textContent = s.n ? `${(s.winRate * 100).toFixed(0)}%` : "0%";
@@ -1142,6 +1212,7 @@
       }
       sparkPath(trades);
       drawPnlBars(trades);
+      drawDrawdown(trades);
       const absL = Math.abs(s.longPl || 0), absS = Math.abs(s.shortPl || 0), absT = absL + absS || 1;
       $("longBar").style.width = `${(absL / absT) * 100}%`;
       $("shortBar").style.width = `${(absS / absT) * 100}%`;
