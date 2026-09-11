@@ -453,12 +453,8 @@
     function moneyInt(val, digits) {
       const n = Number(val);
       if (!Number.isFinite(n)) return 0;
-      if (!Number.isInteger(n)) return n;
       const d = Number(digits);
-      if (Number.isFinite(d) && d > 0 && d <= 12) {
-        if (d >= 6 || Math.abs(n) >= 10 ** Math.min(d, 4)) return n / (10 ** d);
-        return n / (10 ** d);
-      }
+      if (Number.isFinite(d) && d > 0 && d <= 12) return n / (10 ** d);
       if (Math.abs(n) >= 1e8) return n / 1e8;
       if (Math.abs(n) >= 1e5) return n / 100;
       return n;
@@ -575,46 +571,39 @@
       return res;
     }
 
-    function moneyField(obj, names, digits) {
-      if (!obj) return null;
-      for (const n of names) {
-        if (obj[n] != null && obj[n] !== "") {
-          const v = moneyInt(obj[n], digits);
-          if (Number.isFinite(v)) return v;
-        }
-      }
-      return null;
-    }
-
     function extractAccount(res) {
-      const t = findTrader(res);
-      const wrap = res?.payload || res || {};
-      const digits = Number(t.moneyDigits ?? t.MoneyDigits ?? wrap.moneyDigits ?? 2);
-      const namesBal = ["balance", "Balance"];
-      const namesEq = ["equity", "Equity", "cashEquity", "CashEquity"];
-      const namesUn = ["unrealizedNetProfit", "UnrealizedNetProfit", "unrealizedGrossProfit", "netUnrealizedPnL", "unrealizedPnl", "unrealizedPnL"];
-      const bal = moneyField(t, namesBal, digits) ?? moneyField(wrap, namesBal, digits);
-      let eq = moneyField(t, namesEq, digits) ?? moneyField(wrap, namesEq, digits);
-      let un = moneyField(t, namesUn, digits) ?? moneyField(wrap, namesUn, digits);
-      if (un == null && eq != null && bal != null) un = eq - bal;
-      if (eq == null && bal != null && un != null) eq = bal + un;
-      if (un != null && bal != null && Math.abs(un - bal) < 1e-6 && Math.abs(bal) > 1) un = eq != null ? eq - bal : 0;
-      const login = t.traderLogin ?? t.login ?? t.Login ?? t.accountNumber ?? "";
-      const accountId = String(t.ctidTraderAccountId ?? t.CtidTraderAccountId ?? login ?? "");
-      const liveFlag = t.isLive ?? t.live ?? t.Live;
-      const live = liveFlag === true || liveFlag === "true" || String(t.environment || "").toLowerCase() === "live";
-      const fm = moneyField(t, ["freeMargin", "FreeMargin"], digits);
+      const t = (typeof findTrader === "function" ? findTrader(res) : null) || {};
+      const root = res?.payload || res?.account || t || res || {};
+      let balance = pick(t, ["balance", "Balance", "balanceInCents"], NaN);
+      if (!Number.isFinite(balance)) balance = pick(root, ["balance", "Balance", "balanceInCents"], NaN);
+      let equity = pick(t, ["equity", "Equity", "equityInCents"], NaN);
+      if (!Number.isFinite(equity)) equity = pick(root, ["equity", "Equity", "equityInCents"], NaN);
+      const digits = Number(root.moneyDigits ?? root.MoneyDigits ?? t.moneyDigits ?? 2);
+      const balRaw = Number(balance);
+      const eqRaw = Number(equity);
+      const bal = Number.isFinite(balRaw) ? (Math.abs(balRaw) > 1e7 ? moneyInt(balRaw, digits > 2 ? digits : 2) : balRaw) : NaN;
+      const eq = Number.isFinite(eqRaw) ? (Math.abs(eqRaw) > 1e7 ? moneyInt(eqRaw, digits > 2 ? digits : 2) : eqRaw) : NaN;
+      currency = root.depositAsset || root.currency || root.Currency || t.depositCurrency || currency || "";
+      const freeMargin = pick(root, ["freeMargin", "FreeMargin", "freeMarginInCents"], NaN);
+      const fm = Number.isFinite(freeMargin) && Math.abs(freeMargin) > 1e7 ? moneyInt(freeMargin, digits) : freeMargin;
+      const unrealized = pick(root, ["unrealizedNetProfit", "UnrealizedNetProfit", "netUnrealizedPnL"], NaN);
+      const un = Number.isFinite(unrealized)
+        ? (Math.abs(unrealized) > 1e7 ? moneyInt(unrealized, digits) : unrealized)
+        : (Number.isFinite(eq) && Number.isFinite(bal) ? eq - bal : null);
+      const login = t.traderLogin ?? root.traderLogin ?? root.login ?? t.login ?? "";
+      const accountId = String(t.ctidTraderAccountId ?? root.ctidTraderAccountId ?? login ?? "");
+      const liveFlag = t.isLive ?? root.isLive;
       return {
         balance: Number.isFinite(bal) ? bal : null,
         equity: Number.isFinite(eq) ? eq : null,
-        freeMargin: fm,
+        freeMargin: Number.isFinite(fm) ? fm : null,
         floating: Number.isFinite(un) ? un : null,
         login: login ? String(login) : "",
         accountId,
-        broker: t.brokerName ?? t.broker ?? "",
-        live,
+        broker: t.brokerName ?? root.brokerName ?? "",
+        live: liveFlag === true || liveFlag === "true",
         digits,
-        raw: t,
+        raw: root,
       };
     }
 
@@ -683,19 +672,13 @@
       if (!d || typeof d !== "object") return null;
       const close = d.closePositionDetail || d.ClosePositionDetail || d.close_position_detail || null;
       if (!close) return null;
-      const digits = Number(close.moneyDigits ?? d.moneyDigits ?? close.MoneyDigits ?? d.MoneyDigits ?? 2);
-      const ts = asMs(d.executionTimestamp || d.utcLastUpdateTimestamp || d.createTimestamp
-        || d.executionTime || d.closeTimestamp || close.closeTimestamp);
-      if (!ts) return null;
-      const symbolId = Number(d.symbolId ?? d.SymbolId ?? d.tradeData?.symbolId ?? 0);
-      const side = sideOf(d.tradeSide ?? d.TradeSide ?? d.tradeData?.tradeSide);
-      const entry = Number(close.entryPrice ?? close.EntryPrice ?? 0);
-      const exit = Number(d.executionPrice ?? d.ExecutionPrice ?? 0);
-      const lots = lotsOf(d, close);
+      const digits = close.moneyDigits ?? d.moneyDigits ?? close.MoneyDigits ?? d.MoneyDigits ?? 2;
       const gross = moneyInt(close.profit ?? close.grossProfit ?? close.Profit ?? 0, digits);
       const swap = moneyInt(close.swap ?? close.Swap ?? 0, digits);
       const commission = moneyInt(close.commission ?? close.Commission ?? d.commission ?? 0, digits);
       const conv = moneyInt(close.pnlConversionFee ?? close.PnlConversionFee ?? 0, digits);
+      const ts = asMs(d.executionTimestamp || d.utcLastUpdateTimestamp || d.createTimestamp
+        || d.executionTime || d.closeTimestamp || close.closeTimestamp);
       const offsets = d.offsetDeals || d.offsetDeal || [];
       let openTs = 0;
       if (Array.isArray(offsets)) {
@@ -704,12 +687,16 @@
           if (t && (!openTs || t < openTs)) openTs = t;
         }
       }
+      const symbolId = Number(d.symbolId ?? d.SymbolId ?? 0);
       return {
-        id: String(d.dealId ?? d.DealId ?? `${symbolId}-${ts}`),
-        positionId: String(d.positionId ?? d.PositionId ?? d.dealId ?? ts),
+        id: d.dealId ?? d.DealId ?? `${symbolId}-${ts}`,
+        positionId: d.positionId ?? d.PositionId,
         symbolId,
         symbol: symbolNames.get(symbolId) || (symbolId ? `#${symbolId}` : "—"),
-        side, lots, entry, exit,
+        side: sideOf(d.tradeSide ?? d.TradeSide),
+        lots: lotsOf(d, close),
+        entry: Number(close.entryPrice ?? close.EntryPrice ?? 0),
+        exit: Number(d.executionPrice ?? d.ExecutionPrice ?? 0),
         net: gross + swap + commission + conv,
         gross, swap, commission, ts, openTs, open: false,
       };
@@ -772,13 +759,12 @@
     }
 
     function extractTrades(res) {
-      const list = findDeals(res);
-      const extra = extractArray(res, ["deal", "deals", "Deal"]);
-      const all = list.length ? list : extra;
+      let list = extractArray(res, ["deal", "deals", "Deal"]);
+      if (!list.length) list = findDeals(res);
       const out = [];
-      for (const d of all) {
+      for (const d of list) {
         const t = parseClosingDeal(d);
-        if (t && !t.open) out.push(t);
+        if (t) out.push(t);
       }
       return out;
     }
@@ -836,24 +822,27 @@
         }
       };
 
+      try {
+        const res = await once(getDealList(adapter, { fromTimestamp: 0, toTimestamp: Date.now() }));
+        add(extractTrades(res));
+        if (collected.length >= TRADE_LIMIT) return collected;
+      } catch (err) {
+        console.warn("wide deal list failed", err);
+      }
+
       let to = Date.now();
-      for (let i = 0; i < 52; i++) {
+      for (let i = 0; i < 52 && collected.length < TRADE_LIMIT * 2; i++) {
         const from = to - WEEK_MS;
         try {
           const res = await once(getDealList(adapter, { fromTimestamp: from, toTimestamp: to }));
-          const closed = extractTrades(res);
-          add(closed);
-          const grouped = groupClosedPositions(collected);
-          if (grouped.length >= TRADE_LIMIT) break;
-          const hasMore = !!(res?.hasMore ?? res?.payload?.hasMore);
-          if (hasMore && closed.length) to = Math.min(...closed.map((t) => t.ts)) - 1;
-          else to = from;
+          add(extractTrades(res));
         } catch (err) {
-          console.warn("deal list failed", err);
+          console.warn("weekly deal list failed", err);
           break;
         }
+        to = from;
       }
-      return groupClosedPositions(collected);
+      return collected;
     }
 
     function ingestExecution(ev) {
@@ -1074,15 +1063,9 @@
       const a = lastAccount;
       if (a) applyAccountIdentity(a);
       if (a && a.balance != null) {
-        const liveFloat = openTrades.reduce((sum, p) => sum + livePnl(p), 0);
-        const quoted = openTrades.some((p) => quotes.has(Number(p.symbolId)));
-        let floating = quoted ? liveFloat : (a.floating != null ? a.floating : liveFloat);
-        if (floating == null) floating = 0;
-        const equity = (a.equity != null && Math.abs(a.equity - a.balance) > 0.009)
-          ? a.equity
-          : a.balance + floating;
         $("balance").textContent = money(a.balance, currency);
-        $("equity").textContent = money(equity, currency);
+        $("equity").textContent = money(a.equity ?? a.balance, currency);
+        const floating = a.floating ?? ((a.equity ?? a.balance) - a.balance);
         $("floatPl").textContent = money(floating, currency);
         setPlClass($("floatPl"), floating);
         $("openPos").textContent = String(openTrades.length || a.openPositions || 0);
