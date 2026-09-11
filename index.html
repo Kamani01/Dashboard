@@ -239,6 +239,10 @@
       color: var(--muted); font-size: 11.5px; margin-top: 3px;
       font-variant-numeric: tabular-nums;
     }
+    .trade-date {
+      color: var(--text-secondary); font-size: 12px; font-weight: 650; margin-top: 2px;
+      font-variant-numeric: tabular-nums;
+    }
     .trade-pnl {
       font-weight: 750; font-size: 14.5px; font-variant-numeric: tabular-nums;
       text-align: right; align-self: center;
@@ -359,6 +363,11 @@
         <div id="openPos" class="value sm">—</div>
       </div>
       <div class="card metric">
+        <div class="label">Max drawdown</div>
+        <div id="maxDd" class="value sm">—</div>
+        <div class="hint" id="maxDdHint">Peak to trough on this 50</div>
+      </div>
+      <div class="card metric">
         <div class="label">Sharpe ratio</div>
         <div id="sharpe" class="value sm">—</div>
         <div class="hint" id="sharpeHint">Mean close ÷ σ, annualised</div>
@@ -456,9 +465,25 @@
     }
 
     function asMs(t) {
-      const n = Number(t || 0);
+      if (t == null || t === "") return 0;
+      if (typeof t === "object") {
+        if (typeof t.toNumber === "function") return asMs(t.toNumber());
+        if (t.seconds != null) return Number(t.seconds) * 1000 + Number(t.nanos || 0) / 1e6;
+        if (t.low != null || t.high != null) {
+          const n = Number(t.high || 0) * 4294967296 + (Number(t.low || 0) >>> 0);
+          return asMs(n);
+        }
+      }
+      if (typeof t === "string" && /[T\-\/:]/.test(t) && Number.isNaN(Number(t))) {
+        const p = Date.parse(t);
+        return Number.isFinite(p) ? p : 0;
+      }
+      const n = Number(t);
       if (!Number.isFinite(n) || n <= 0) return 0;
-      return n > 1e12 ? n : n * 1000;
+      if (n > 1e14) return Math.floor(n / 1000);
+      if (n > 1e11) return n;
+      if (n > 1e9) return n * 1000;
+      return n;
     }
 
     function sideOf(raw) {
@@ -489,10 +514,13 @@
     }
 
     function fmtTime(ms) {
-      if (!ms) return "";
-      const d = new Date(ms);
+      const n = asMs(ms);
+      if (!n) return "";
+      const d = new Date(n);
+      if (Number.isNaN(d.getTime())) return "";
       return d.toLocaleString(undefined, {
-        month: "short", day: "numeric", hour: "2-digit", minute: "2-digit"
+        year: "numeric", month: "short", day: "numeric",
+        hour: "2-digit", minute: "2-digit"
       });
     }
 
@@ -656,7 +684,8 @@
       const close = d.closePositionDetail || d.ClosePositionDetail || d.close_position_detail || null;
       if (!close) return null;
       const digits = Number(close.moneyDigits ?? d.moneyDigits ?? close.MoneyDigits ?? d.MoneyDigits ?? 2);
-      const ts = asMs(d.executionTimestamp || d.utcLastUpdateTimestamp || d.createTimestamp);
+      const ts = asMs(d.executionTimestamp || d.utcLastUpdateTimestamp || d.createTimestamp
+        || d.executionTime || d.closeTimestamp || close.closeTimestamp);
       if (!ts) return null;
       const symbolId = Number(d.symbolId ?? d.SymbolId ?? d.tradeData?.symbolId ?? 0);
       const side = sideOf(d.tradeSide ?? d.TradeSide ?? d.tradeData?.tradeSide);
@@ -915,7 +944,16 @@
       }
       const slope = sxx > 0 ? sxy / sxx : 0;
       const r2 = syy > 1e-12 && sxx > 1e-12 ? Math.min(1, (sxy * sxy) / (sxx * syy)) : 0;
-      return { sharpe, recency, recentNet, recentN, r2, slope };
+      let peak = 0, maxDd = 0;
+      run = 0;
+      for (const v of nets) {
+        run += v;
+        if (run > peak) peak = run;
+        const dd = peak - run;
+        if (dd > maxDd) maxDd = dd;
+      }
+      const maxDdPct = peak > 1e-9 ? maxDd / peak : 0;
+      return { sharpe, recency, recentNet, recentN, r2, slope, maxDd, maxDdPct, peak };
     }
 
     function sparkPath(rows) {
@@ -995,12 +1033,14 @@
         const px = (t.entry && t.exit)
           ? `${fmtPx(t.entry)} → ${fmtPx(t.exit)}`
           : (t.entry ? fmtPx(t.entry) : "");
-        const bits = [`${fmtLots(t.lots)} lot`, px, dur, t.open ? "OPEN" : fmtTime(t.ts)].filter(Boolean);
+        const when = t.open ? "OPEN" : (fmtTime(t.ts) || fmtTime(t.openTs) || "Date unavailable");
+        const bits = [`${fmtLots(t.lots)} lot`, px, dur].filter(Boolean);
         const cls = t.net > 0 ? "pos" : t.net < 0 ? "neg" : "";
         const side = t.open ? "watch" : t.side.toLowerCase();
         return `<div class="trade">
           <div>
             <div class="trade-sym">${escapeHtml(t.symbol)}<span class="side ${side}">${t.open ? "OPEN" : escapeHtml(t.side)}</span></div>
+            <div class="trade-date">${escapeHtml(when)}</div>
             <div class="trade-meta">${escapeHtml(bits.join(" · "))}</div>
           </div>
           <div class="trade-pnl ${cls}">${t.open && !t.net ? "live" : `${t.net > 0 ? "+" : ""}${money(t.net, currency)}`}</div>
@@ -1068,6 +1108,17 @@
         : "Streak —";
 
       $("pf").textContent = !s.n ? "—" : !Number.isFinite(s.pf) ? "∞" : s.pf.toFixed(2);
+      if (s.maxDd == null) {
+        $("maxDd").textContent = "—";
+        $("maxDd").classList.remove("pos", "neg");
+        $("maxDdHint").textContent = "Peak to trough on this 50";
+      } else {
+        $("maxDd").textContent = money(s.maxDd, currency);
+        setPlClass($("maxDd"), s.maxDd > 0 ? -1 : 0);
+        $("maxDdHint").textContent = s.peak > 0
+          ? `${(s.maxDdPct * 100).toFixed(1)}% from equity peak in this sample`
+          : "Peak to trough on this 50";
+      }
 
       if (s.sharpe == null) {
         $("sharpe").textContent = "—";
