@@ -194,6 +194,7 @@
     .spark-line { fill: none; stroke-width: 2.2; stroke-linejoin: round; stroke-linecap: round; }
     .spark-fill { opacity: 0.18; }
     .axis { fill: var(--muted); font-size: 8px; font-family: inherit; }
+    .axis-line { stroke: var(--muted); stroke-width: 0.8; opacity: 0.55; }
     .win-row { display: flex; align-items: center; gap: 16px; margin-top: 8px; }
     .donut { width: 88px; height: 88px; flex: 0 0 auto; }
     .win-big { font-size: 34px; font-weight: 800; letter-spacing: -0.04em; line-height: 1; }
@@ -331,7 +332,7 @@
           </div>
           <div class="pct-pill">Oldest → newest</div>
         </div>
-        <svg id="spark" class="spark" viewBox="0 0 320 72" preserveAspectRatio="none" aria-hidden="true"></svg>
+        <svg id="spark" class="spark" viewBox="0 0 340 90" preserveAspectRatio="none" aria-hidden="true"></svg>
       </div>
 
       <div class="card wide">
@@ -669,7 +670,7 @@
         login: login ? String(login) : "",
         accountId,
         broker: t.brokerName ?? root.brokerName ?? "",
-        live: liveFlag === true || liveFlag === "true",
+        live: String(liveFlag).toLowerCase() !== "false" && String(t.environment || root.environment || "").toLowerCase() !== "demo",
         digits,
         raw: root,
       };
@@ -689,7 +690,7 @@
       }
       const bits = [
         acc.login ? `#${acc.login}` : (acc.accountId ? `id ${acc.accountId}` : null),
-        acc.live ? "LIVE" : "DEMO",
+        "Live",
         acc.broker || null,
         currency || null,
       ].filter(Boolean);
@@ -1026,14 +1027,30 @@
       return sign + a.toFixed(a >= 100 ? 0 : 0);
     }
 
-    function yScale(min, max, H, pad) {
-      const span = (max - min) || 1;
-      return (v) => H - pad - ((v - min) / span) * (H - pad * 2);
+    function axisBox(W, H, min, max, n) {
+      const padL = 36, padR = 8, padT = 10, padB = 16;
+      const span = max - min || 1;
+      const x = (i) => padL + (i / Math.max(1, (n || 1) - 1)) * (W - padL - padR);
+      const y = (v) => padT + (1 - (v - min) / span) * (H - padT - padB);
+      const ticks = [];
+      ticks.push(max);
+      if (min < -1e-9 && max > 1e-9) ticks.push(0);
+      if (Math.abs(min - max) > 1e-9) ticks.push(min);
+      let g = `<line class="axis-line" x1="${padL}" y1="${padT}" x2="${padL}" y2="${H - padB}"/>`;
+      g += `<line class="axis-line" x1="${padL}" y1="${H - padB}" x2="${W - padR}" y2="${H - padB}"/>`;
+      for (const v of ticks) {
+        const yy = y(v);
+        g += `<line class="axis-line" x1="${padL - 3}" x2="${padL}" y1="${yy.toFixed(1)}" y2="${yy.toFixed(1)}"/>`;
+        g += `<text class="axis" x="2" y="${(yy + 3).toFixed(1)}">${axisMoney(v)}</text>`;
+      }
+      g += `<text class="axis" x="${padL}" y="${H - 3}">oldest</text>`;
+      g += `<text class="axis" x="${W - padR - 32}" y="${H - 3}">newest</text>`;
+      return { g, x, y, padL, padR, padT, padB, zeroY: y(0) };
     }
 
     function sparkPath(rows) {
       const svg = $("spark");
-      const W = 320, H = 72, pad = 4;
+      const W = 340, H = 90;
       if (!rows.length) {
         svg.innerHTML = "";
         return;
@@ -1043,16 +1060,13 @@
       const pts = chrono.map((t) => { run += t.net; return run; });
       const min = Math.min(0, ...pts);
       const max = Math.max(0, ...pts);
-      const span = max - min || 1;
-      const x = (i) => pad + (i / Math.max(1, pts.length - 1)) * (W - pad * 2);
-      const y = (v) => H - pad - ((v - min) / span) * (H - pad * 2);
-      const zeroY = y(0);
-      const d = pts.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
-      const fill = `${d} L${x(pts.length - 1).toFixed(1)},${zeroY.toFixed(1)} L${x(0).toFixed(1)},${zeroY.toFixed(1)} Z`;
-      const up = pts[pts.length - 1] >= 0;
-      const color = up ? "var(--good)" : "var(--bad)";
+      const ax = axisBox(W, H, min, max, pts.length);
+      const d = pts.map((v, i) => `${i ? "L" : "M"}${ax.x(i).toFixed(1)},${ax.y(v).toFixed(1)}`).join(" ");
+      const fill = `${d} L${ax.x(pts.length - 1).toFixed(1)},${ax.zeroY.toFixed(1)} L${ax.x(0).toFixed(1)},${ax.zeroY.toFixed(1)} Z`;
+      const color = pts[pts.length - 1] >= 0 ? "var(--good)" : "var(--bad)";
       svg.innerHTML =
-        `<line class="spark-zero" x1="${pad}" x2="${W - pad}" y1="${zeroY.toFixed(1)}" y2="${zeroY.toFixed(1)}" />` +
+        ax.g +
+        `<line class="spark-zero" x1="${ax.padL}" x2="${W - ax.padR}" y1="${ax.zeroY.toFixed(1)}" y2="${ax.zeroY.toFixed(1)}" />` +
         `<path class="spark-fill" d="${fill}" fill="${color}"></path>` +
         `<path class="spark-line" d="${d}" stroke="${color}"></path>`;
     }
@@ -1074,19 +1088,17 @@
       const el = $("mcChart");
       if (!el || !pack) return;
       const { curves, n, min, max, med, end } = pack;
-      const W = 320, H = 110, pad = 6;
-      const span = max - min || 1;
-      const x = (i) => pad + (i / Math.max(1, n - 1)) * (W - pad * 2);
-      const y = (v) => H - pad - ((v - min) / span) * (H - pad * 2);
-      const zeroY = y(0);
+      const W = 320, H = 110;
+      const ax = axisBox(W, H, min, max, n);
       const lines = curves.map((c) => {
-        const d = c.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+        const d = c.map((v, i) => `${i ? "L" : "M"}${ax.x(i).toFixed(1)},${ax.y(v).toFixed(1)}`).join(" ");
         return `<path d="${d}" fill="none" stroke="var(--accent)" stroke-width="0.7" opacity="0.22"/>`;
       }).join("");
-      const md = med.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+      const md = med.map((v, i) => `${i ? "L" : "M"}${ax.x(i).toFixed(1)},${ax.y(v).toFixed(1)}`).join(" ");
       const mcol = end >= 0 ? "var(--good)" : "var(--bad)";
       el.innerHTML =
-        `<line class="spark-zero" x1="${pad}" x2="${W - pad}" y1="${zeroY.toFixed(1)}" y2="${zeroY.toFixed(1)}"/>` +
+        ax.g +
+        `<line class="spark-zero" x1="${ax.padL}" x2="${W - ax.padR}" y1="${ax.zeroY.toFixed(1)}" y2="${ax.zeroY.toFixed(1)}"/>` +
         lines +
         `<path d="${md}" fill="none" stroke="${mcol}" stroke-width="2.2"/>`;
       if ($("mcEnd")) $("mcEnd").textContent = `median end ${axisMoney(end)} · frozen`;
@@ -1181,14 +1193,12 @@
       const fit = roll.map((_, i) => A * Math.exp(-k * i) + C);
       const min = Math.min(0, ...roll, ...fit);
       const max = Math.max(0, ...roll, ...fit);
-      const span = max - min || 1;
-      const x = (i) => pad + (i / Math.max(1, n - 1)) * (W - pad * 2);
-      const y = (v) => H - pad - ((v - min) / span) * (H - pad * 2);
-      const zeroY = y(0);
-      const dRoll = roll.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
-      const dFit = fit.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+      const ax = axisBox(W, H, min, max, n);
+      const dRoll = roll.map((v, i) => `${i ? "L" : "M"}${ax.x(i).toFixed(1)},${ax.y(v).toFixed(1)}`).join(" ");
+      const dFit = fit.map((v, i) => `${i ? "L" : "M"}${ax.x(i).toFixed(1)},${ax.y(v).toFixed(1)}`).join(" ");
       el.innerHTML =
-        `<line class="spark-zero" x1="${pad}" x2="${W - pad}" y1="${zeroY.toFixed(1)}" y2="${zeroY.toFixed(1)}"/>` +
+        ax.g +
+        `<line class="spark-zero" x1="${ax.padL}" x2="${W - ax.padR}" y1="${ax.zeroY.toFixed(1)}" y2="${ax.zeroY.toFixed(1)}"/>` +
         `<path d="${dRoll}" fill="none" stroke="var(--accent)" stroke-width="2"/>` +
         `<path d="${dFit}" fill="none" stroke="var(--warn)" stroke-width="1.8" stroke-dasharray="4 3"/>`;
       if ($("decayHint")) {
@@ -1209,13 +1219,11 @@
         return peak - run;
       });
       const maxDd = Math.max(...dds, 0);
-      const yv = (v) => padT + (v / (maxDd || 1)) * (H - padT - padB);
-      const x = (i) => padL + (i / Math.max(1, dds.length - 1)) * (W - padL - padR);
-      const d = dds.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${yv(v).toFixed(1)}`).join(" ");
-      const fill = `${d} L${x(dds.length - 1).toFixed(1)},${padT.toFixed(1)} L${x(0).toFixed(1)},${padT.toFixed(1)} Z`;
+      const ax = axisBox(W, H, -(maxDd || 1), 0, dds.length);
+      const d = dds.map((v, i) => `${i ? "L" : "M"}${ax.x(i).toFixed(1)},${ax.y(-v).toFixed(1)}`).join(" ");
+      const fill = `${d} L${ax.x(dds.length - 1).toFixed(1)},${ax.y(0).toFixed(1)} L${ax.x(0).toFixed(1)},${ax.y(0).toFixed(1)} Z`;
       el.innerHTML =
-        `<text class="axis" x="2" y="${yv(maxDd) + 3}">-${axisMoney(maxDd)}</text>` +
-        `<text class="axis" x="2" y="${padT + 8}">0</text>` +
+        ax.g +
         `<path class="spark-fill" d="${fill}" fill="var(--bad)"></path>` +
         `<path class="spark-line" d="${d}" stroke="var(--bad)"></path>`;
       if ($("ddCaption")) {
