@@ -337,12 +337,23 @@
       <div class="card wide">
         <div class="progress-head">
           <div>
-            <div class="label">P/L per close</div>
-            <div id="pnlScale" class="hint" style="margin-top:4px">Bar height = actual P/L</div>
+            <div class="label">Monte Carlo (spaghetti)</div>
+            <div class="hint" style="margin-top:4px">Same 50 P/Ls, shuffled order · 80 paths</div>
           </div>
-          <div id="pnlRange" class="pct-pill">—</div>
+          <div id="mcEnd" class="pct-pill">—</div>
         </div>
-        <svg id="pnlBars" class="spark tall" viewBox="0 0 360 150" preserveAspectRatio="none" aria-hidden="true"></svg>
+        <svg id="mcChart" class="spark tall" viewBox="0 0 320 110" preserveAspectRatio="none" aria-hidden="true"></svg>
+      </div>
+
+      <div class="card wide">
+        <div class="progress-head">
+          <div>
+            <div class="label">MAE / MFE scatter</div>
+            <div class="hint" style="margin-top:4px">X = adverse · Y = favorable</div>
+          </div>
+          <div id="maeHint" class="pct-pill">Close path</div>
+        </div>
+        <svg id="maeMfe" class="spark tall" viewBox="0 0 320 110" preserveAspectRatio="none" aria-hidden="true"></svg>
       </div>
 
       <div class="card wide">
@@ -354,17 +365,6 @@
           <div class="pct-pill">From peak in this 50</div>
         </div>
         <svg id="ddChart" class="spark" viewBox="0 0 360 140" preserveAspectRatio="none" aria-hidden="true"></svg>
-      </div>
-
-      <div class="card wide">
-        <div class="progress-head">
-          <div>
-            <div class="label">Long vs short</div>
-            <div id="lsCaption" class="value sm">—</div>
-          </div>
-        </div>
-        <div class="split-bar"><i class="lg" id="longBar"></i><i class="sh" id="shortBar"></i></div>
-        <div class="row"><span id="longHint">Long —</span><span id="shortHint">Short —</span></div>
       </div>
 
       <div class="card metric">
@@ -495,6 +495,29 @@
       return n;
     }
 
+    function firstTs(...objs) {
+      const keys = [
+        "executionTimestamp", "utcLastUpdateTimestamp", "createTimestamp", "timestamp",
+        "closeTimestamp", "executionTime", "time", "utcLastUpdateTimestamp",
+        "execution_timestamp", "utc_last_update_timestamp", "create_timestamp",
+      ];
+      for (const obj of objs) {
+        if (!obj || typeof obj !== "object") continue;
+        for (const k of keys) {
+          const t = asMs(obj[k] ?? obj[k[0]?.toUpperCase?.() + k.slice(1)]);
+          if (t) return t;
+        }
+        for (const [k, v] of Object.entries(obj)) {
+          if (typeof v === "object") continue;
+          if (/time|date|stamp/i.test(k)) {
+            const t = asMs(v);
+            if (t) return t;
+          }
+        }
+      }
+      return 0;
+    }
+
     function sideOf(raw) {
       if (raw == null) return "BUY";
       const s = String(raw).toUpperCase();
@@ -503,16 +526,32 @@
       return Number(raw) === 2 ? "SELL" : "BUY";
     }
 
+    function numish(v) {
+      if (v == null || v === "") return NaN;
+      if (typeof v === "object") {
+        if (typeof v.toNumber === "function") return Number(v.toNumber());
+        if (v.low != null || v.high != null) return Number(v.high || 0) * 4294967296 + (Number(v.low || 0) >>> 0);
+      }
+      const n = Number(v);
+      return Number.isFinite(n) ? n : NaN;
+    }
+
     function lotsOf(deal, close) {
-      const vol = Number(close?.closedVolume ?? deal.filledVolume ?? deal.volume ?? 0);
-      const lot = Number(deal.lotSize || 0);
-      if (lot > 0) return vol / lot;
+      const vol = numish(close?.closedVolume ?? close?.ClosedVolume ?? close?.closed_volume
+        ?? deal.filledVolume ?? deal.FilledVolume ?? deal.volume ?? deal.Volume ?? deal.tradeData?.volume);
+      const lot = numish(deal.lotSize ?? deal.LotSize ?? close?.lotSize);
+      if (Number.isFinite(vol) && vol > 0 && vol < 50) return vol;
+      if (Number.isFinite(lot) && lot > 0 && Number.isFinite(vol) && vol > 0) return vol / lot;
+      if (!Number.isFinite(vol) || vol <= 0) return NaN;
+      if (vol >= 1e6) return vol / 10_000_000;
+      if (vol >= 1000) return vol / 100_000;
       return vol / 10_000_000;
     }
 
     function fmtLots(n) {
-      if (!Number.isFinite(n)) return "—";
-      return n >= 10 ? n.toFixed(2) : n.toFixed(2);
+      if (!Number.isFinite(n) || n <= 0) return "—";
+      const x = n >= 10 ? n.toFixed(2) : n.toFixed(2);
+      return x;
     }
     function fmtPx(n) {
       const x = Number(n);
@@ -695,8 +734,7 @@
       const swap = moneyInt(close.swap ?? close.Swap ?? 0, digits);
       const commission = moneyInt(close.commission ?? close.Commission ?? d.commission ?? 0, digits);
       const conv = moneyInt(close.pnlConversionFee ?? close.PnlConversionFee ?? 0, digits);
-      const ts = asMs(d.executionTimestamp || d.utcLastUpdateTimestamp || d.createTimestamp
-        || d.executionTime || d.closeTimestamp || close.closeTimestamp);
+      const ts = firstTs(d, close);
       const offsets = d.offsetDeals || d.offsetDeal || [];
       let openTs = 0;
       if (Array.isArray(offsets)) {
@@ -1013,37 +1051,78 @@
         ` stroke-dasharray="${dash}" transform="rotate(-90 50 50)"/>`;
     }
 
-    function drawPnlBars(rows) {
-      const el = $("pnlBars");
+    function drawMonteCarlo(rows) {
+      const el = $("mcChart");
       if (!el) return;
-      const chrono = [...rows].slice().reverse();
-      const W = 360, H = 150, padL = 40, padR = 8, padT = 10, padB = 16;
-      if (!chrono.length) { el.innerHTML = ""; return; }
-      const nets = chrono.map((t) => t.net);
-      const min = Math.min(0, ...nets);
-      const max = Math.max(0, ...nets);
+      const nets = [...rows].slice().reverse().map((t) => t.net);
+      const n = nets.length;
+      const W = 320, H = 110, pad = 6;
+      if (!n) { el.innerHTML = ""; return; }
+      const paths = 80;
+      const curves = [];
+      let gMin = 0, gMax = 0;
+      for (let p = 0; p < paths; p++) {
+        const bag = nets.slice();
+        for (let i = bag.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [bag[i], bag[j]] = [bag[j], bag[i]];
+        }
+        let run = 0;
+        const c = bag.map((v) => { run += v; if (run < gMin) gMin = run; if (run > gMax) gMax = run; return run; });
+        curves.push(c);
+      }
+      const min = Math.min(0, gMin);
+      const max = Math.max(0, gMax);
       const span = max - min || 1;
-      const yv = (v) => padT + (1 - (v - min) / span) * (H - padT - padB);
-      const n = chrono.length;
-      const inner = W - padL - padR;
-      const bw = inner / n;
-      const zeroY = yv(0);
-      const rects = chrono.map((t, i) => {
-        const y1 = yv(t.net);
-        const y = Math.min(y1, zeroY);
-        const h = Math.max(1.5, Math.abs(y1 - zeroY));
-        const fill = t.net >= 0 ? "var(--good)" : "var(--bad)";
-        return `<rect x="${(padL + i * bw + bw * 0.12).toFixed(2)}" y="${y.toFixed(2)}" width="${Math.max(1.4, bw * 0.76).toFixed(2)}" height="${h.toFixed(2)}" fill="${fill}" rx="1.2"/>`;
+      const x = (i) => pad + (i / Math.max(1, n - 1)) * (W - pad * 2);
+      const y = (v) => H - pad - ((v - min) / span) * (H - pad * 2);
+      const zeroY = y(0);
+      const lines = curves.map((c) => {
+        const d = c.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+        return `<path d="${d}" fill="none" stroke="var(--accent)" stroke-width="0.7" opacity="0.22"/>`;
       }).join("");
+      const med = [];
+      for (let i = 0; i < n; i++) {
+        const col = curves.map((c) => c[i]).sort((a, b) => a - b);
+        med.push(col[Math.floor(col.length / 2)]);
+      }
+      const md = med.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+      const end = med[med.length - 1] || 0;
+      const mcol = end >= 0 ? "var(--good)" : "var(--bad)";
       el.innerHTML =
-        `<text class="axis" x="2" y="${yv(max) + 4}">${axisMoney(max)}</text>` +
-        `<text class="axis" x="2" y="${zeroY + 3}">0</text>` +
-        `<text class="axis" x="2" y="${yv(min) + 3}">${axisMoney(min)}</text>` +
-        `<line class="spark-zero" x1="${padL}" x2="${W - padR}" y1="${zeroY.toFixed(1)}" y2="${zeroY.toFixed(1)}"/>` +
-        rects;
-      const hi = Math.max(...nets.map(Math.abs), 0);
-      if ($("pnlRange")) $("pnlRange").textContent = `scale ±${axisMoney(hi)}`;
-      if ($("pnlScale")) $("pnlScale").textContent = `Each bar is one close · tallest = ${axisMoney(hi)}`;
+        `<line class="spark-zero" x1="${pad}" x2="${W - pad}" y1="${zeroY.toFixed(1)}" y2="${zeroY.toFixed(1)}"/>` +
+        lines +
+        `<path d="${md}" fill="none" stroke="${mcol}" stroke-width="2.2"/>`;
+      if ($("mcEnd")) $("mcEnd").textContent = `median end ${axisMoney(end)}`;
+    }
+
+    function drawMaeMfe(rows) {
+      const el = $("maeMfe");
+      if (!el) return;
+      const W = 320, H = 110, pad = 18;
+      if (!rows.length) { el.innerHTML = ""; return; }
+      const pts = rows.map((t) => ({
+        mae: Math.max(0, -t.net),
+        mfe: Math.max(0, t.net),
+        win: t.net > 0,
+      }));
+      const maxX = Math.max(...pts.map((p) => p.mae), 1);
+      const maxY = Math.max(...pts.map((p) => p.mfe), 1);
+      const max = Math.max(maxX, maxY);
+      const x = (v) => pad + (v / max) * (W - pad * 2);
+      const y = (v) => H - pad - (v / max) * (H - pad * 2);
+      const dots = pts.map((p) =>
+        `<circle cx="${x(p.mae).toFixed(1)}" cy="${y(p.mfe).toFixed(1)}" r="2.6" fill="${p.win ? "var(--good)" : "var(--bad)"}" opacity="0.85"/>`
+      ).join("");
+      const diag = `M${x(0).toFixed(1)},${y(0).toFixed(1)} L${x(max).toFixed(1)},${y(max).toFixed(1)}`;
+      el.innerHTML =
+        `<text class="axis" x="${pad}" y="${H - 4}">MAE</text>` +
+        `<text class="axis" x="4" y="${pad}">MFE</text>` +
+        `<line class="spark-zero" x1="${pad}" x2="${W - pad}" y1="${y(0).toFixed(1)}" y2="${y(0).toFixed(1)}"/>` +
+        `<line class="spark-zero" x1="${x(0).toFixed(1)}" x2="${x(0).toFixed(1)}" y1="${pad}" y2="${H - pad}"/>` +
+        `<path d="${diag}" fill="none" stroke="var(--muted)" stroke-width="1" stroke-dasharray="3 3" opacity="0.5"/>` +
+        dots;
+      if ($("maeHint")) $("maeHint").textContent = "From close P/L";
     }
 
     function drawDrawdown(rows) {
@@ -1100,15 +1179,16 @@
         const px = (t.entry && t.exit)
           ? `${fmtPx(t.entry)} → ${fmtPx(t.exit)}`
           : (t.entry ? fmtPx(t.entry) : "");
-        const when = t.open ? "OPEN" : (fmtTime(t.ts) || fmtTime(t.openTs) || "Date unavailable");
-        const bits = [`${fmtLots(t.lots)} lot`, px, dur].filter(Boolean);
+        const when = t.open ? "OPEN" : (fmtTime(t.ts) || fmtTime(t.openTs) || "");
+        const lotTxt = fmtLots(t.lots);
+        const bits = [lotTxt !== "—" ? `${lotTxt} lot` : null, px, dur, when || null].filter(Boolean);
         const cls = t.net > 0 ? "pos" : t.net < 0 ? "neg" : "";
         const side = t.open ? "watch" : t.side.toLowerCase();
         return `<div class="trade">
           <div>
             <div class="trade-sym">${escapeHtml(t.symbol)}<span class="side ${side}">${t.open ? "OPEN" : escapeHtml(t.side)}</span></div>
-            <div class="trade-date">${escapeHtml(when)}</div>
-            <div class="trade-meta">${escapeHtml(bits.join(" · "))}</div>
+            ${when ? `<div class="trade-date">${escapeHtml(when)}</div>` : ""}
+            <div class="trade-meta">${escapeHtml(bits.join(" · ") || " ")}</div>
           </div>
           <div class="trade-pnl ${cls}">${t.open && !t.net ? "live" : `${t.net > 0 ? "+" : ""}${money(t.net, currency)}`}</div>
         </div>`;
@@ -1212,14 +1292,9 @@
           : (s.r2 >= 0.7 ? "Smooth downtrend" : "Choppy / no clear line");
       }
       sparkPath(trades);
-      drawPnlBars(trades);
+      drawMonteCarlo(trades);
+      drawMaeMfe(trades);
       drawDrawdown(trades);
-      const absL = Math.abs(s.longPl || 0), absS = Math.abs(s.shortPl || 0), absT = absL + absS || 1;
-      $("longBar").style.width = `${(absL / absT) * 100}%`;
-      $("shortBar").style.width = `${(absS / absT) * 100}%`;
-      $("lsCaption").textContent = s.n ? `${money(s.longPl, currency)} / ${money(s.shortPl, currency)}` : "—";
-      $("longHint").textContent = `Long ${money(s.longPl, currency)}`;
-      $("shortHint").textContent = `Short ${money(s.shortPl, currency)}`;
       $("listCaption").textContent = `${filteredTrades().length} shown`;
       renderList();
 
