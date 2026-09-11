@@ -331,7 +331,7 @@
           </div>
           <div class="pct-pill">Oldest → newest</div>
         </div>
-        <svg id="spark" class="spark tall" viewBox="0 0 360 150" preserveAspectRatio="none" aria-hidden="true"></svg>
+        <svg id="spark" class="spark" viewBox="0 0 320 72" preserveAspectRatio="none" aria-hidden="true"></svg>
       </div>
 
       <div class="card wide">
@@ -923,7 +923,7 @@
       const n = rows.length;
       const empty = { sharpe: null, recency: null, recentNet: 0, recentN: 0, r2: null, slope: 0 };
       if (n < 3) return empty;
-      const chrono = [...rows].sort((a, b) => a.ts - b.ts);
+      const chrono = [...rows].slice().reverse();
       const nets = chrono.map((t) => t.net);
       const mean = nets.reduce((a, b) => a + b, 0) / n;
       let varSum = 0;
@@ -978,25 +978,26 @@
 
     function sparkPath(rows) {
       const svg = $("spark");
-      const W = 360, H = 150, padL = 40, padR = 8, padT = 10, padB = 16;
-      if (!rows.length) { svg.innerHTML = ""; return; }
-      const chrono = [...rows].sort((a, b) => a.ts - b.ts);
+      const W = 320, H = 72, pad = 4;
+      if (!rows.length) {
+        svg.innerHTML = "";
+        return;
+      }
+      const chrono = [...rows].reverse();
       let run = 0;
       const pts = chrono.map((t) => { run += t.net; return run; });
       const min = Math.min(0, ...pts);
       const max = Math.max(0, ...pts);
       const span = max - min || 1;
-      const yv = (v) => padT + (1 - (v - min) / span) * (H - padT - padB);
-      const x = (i) => padL + (i / Math.max(1, pts.length - 1)) * (W - padL - padR);
-      const zeroY = yv(0);
-      const d = pts.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${yv(v).toFixed(1)}`).join(" ");
+      const x = (i) => pad + (i / Math.max(1, pts.length - 1)) * (W - pad * 2);
+      const y = (v) => H - pad - ((v - min) / span) * (H - pad * 2);
+      const zeroY = y(0);
+      const d = pts.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
       const fill = `${d} L${x(pts.length - 1).toFixed(1)},${zeroY.toFixed(1)} L${x(0).toFixed(1)},${zeroY.toFixed(1)} Z`;
-      const color = pts[pts.length - 1] >= 0 ? "var(--good)" : "var(--bad)";
+      const up = pts[pts.length - 1] >= 0;
+      const color = up ? "var(--good)" : "var(--bad)";
       svg.innerHTML =
-        `<text class="axis" x="2" y="${yv(max) + 4}">${axisMoney(max)}</text>` +
-        `<text class="axis" x="2" y="${zeroY + 3}">0</text>` +
-        `<text class="axis" x="2" y="${yv(min) + 3}">${axisMoney(min)}</text>` +
-        `<line class="spark-zero" x1="${padL}" x2="${W - padR}" y1="${zeroY.toFixed(1)}" y2="${zeroY.toFixed(1)}" />` +
+        `<line class="spark-zero" x1="${pad}" x2="${W - pad}" y1="${zeroY.toFixed(1)}" y2="${zeroY.toFixed(1)}" />` +
         `<path class="spark-fill" d="${fill}" fill="${color}"></path>` +
         `<path class="spark-line" d="${d}" stroke="${color}"></path>`;
     }
@@ -1015,7 +1016,7 @@
     function drawPnlBars(rows) {
       const el = $("pnlBars");
       if (!el) return;
-      const chrono = [...rows].sort((a, b) => a.ts - b.ts);
+      const chrono = [...rows].slice().reverse();
       const W = 360, H = 150, padL = 40, padR = 8, padT = 10, padB = 16;
       if (!chrono.length) { el.innerHTML = ""; return; }
       const nets = chrono.map((t) => t.net);
@@ -1048,7 +1049,7 @@
     function drawDrawdown(rows) {
       const el = $("ddChart");
       if (!el) return;
-      const chrono = [...rows].sort((a, b) => a.ts - b.ts);
+      const chrono = [...rows].slice().reverse();
       const W = 360, H = 140, padL = 40, padR = 8, padT = 10, padB = 16;
       if (!chrono.length) { el.innerHTML = ""; return; }
       let run = 0, peak = 0;
