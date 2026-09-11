@@ -226,6 +226,7 @@
     }
     .side.buy { background: var(--good-soft); color: var(--good); }
     .side.sell { background: var(--bad-soft); color: var(--bad); }
+    .side.watch { background: var(--warn-soft); color: var(--warn); }
     .trade-meta {
       color: var(--muted); font-size: 11.5px; margin-top: 3px;
       font-variant-numeric: tabular-nums;
@@ -450,6 +451,7 @@
         </div>
         <div class="chips" id="chips">
           <button class="chip on" data-filter="all" type="button">All</button>
+          <button class="chip" data-filter="open" type="button">Open</button>
           <button class="chip" data-filter="win" type="button">Wins</button>
           <button class="chip" data-filter="loss" type="button">Losses</button>
           <button class="chip" data-filter="buy" type="button">Buys</button>
@@ -457,8 +459,7 @@
         </div>
         <div class="trades" id="trades"></div>
         <div class="hint">
-          Uses cTrader closing deals (including partial closes). If the account has fewer than 50,
-          the sample is whatever is available.
+          Open fills are recorded as they happen. Closed P/L is stored in a local journal and merged with cTrader deal history.
         </div>
       </div>
     </div>
@@ -471,6 +472,8 @@
       getDealList,
       getLightSymbolList,
       executionEvent,
+      quoteEvent,
+      subscribeQuotes,
       handleConfirmEvent,
       registerEvent,
     } from "https://esm.sh/@spotware-web-team/sdk@0.0.9";
@@ -508,8 +511,12 @@
     function moneyInt(val, digits) {
       const n = Number(val);
       if (!Number.isFinite(n)) return 0;
+      if (!Number.isInteger(n)) return n;
       const d = Number(digits);
-      if (Number.isFinite(d) && d > 0 && d <= 12) return n / (10 ** d);
+      if (Number.isFinite(d) && d > 0 && d <= 12) {
+        if (d >= 6 || Math.abs(n) >= 10 ** Math.min(d, 4)) return n / (10 ** d);
+        return n / (10 ** d);
+      }
       if (Math.abs(n) >= 1e8) return n / 1e8;
       if (Math.abs(n) >= 1e5) return n / 100;
       return n;
@@ -556,8 +563,25 @@
     let symbolNames = new Map();
     let trades = [];
     let allTrades = [];
+    let openTrades = [];
+    let quotes = new Map();
+    let quotedIds = new Set();
+    let quotePaint = null;
     let listFilter = "all";
     let loadingDeals = false;
+    const JOURNAL_KEY = "dashTradeJournal";
+
+    function loadJournal() {
+      try {
+        const raw = JSON.parse(localStorage.getItem(JOURNAL_KEY) || "{}");
+        return { closed: Array.isArray(raw.closed) ? raw.closed : [], open: Array.isArray(raw.open) ? raw.open : [] };
+      } catch { return { closed: [], open: [] }; }
+    }
+    function saveJournal() {
+      const closed = allTrades.slice(0, 200);
+      const open = openTrades.slice(0, 50);
+      localStorage.setItem(JOURNAL_KEY, JSON.stringify({ closed, open }));
+    }
 
     const SIZES = [7500, 12500, 25000, 50000, 100000];
     const PROGRAMS = {
@@ -713,7 +737,8 @@
     function renderChallenge() {
       const prog = PROGRAMS[challenge.program];
       const phase = phaseOf(prog, challenge.phase);
-      const floating = lastAccount?.floating ?? 0;
+      const liveFloat = openTrades.reduce((a, p) => a + livePnl(p), 0);
+      const floating = liveFloat || lastAccount?.floating || 0;
       const ev = evalChallenge(allTrades.length ? allTrades : trades, floating, Date.now());
       $("chTitle").textContent = `${prog.name} · ${money(challenge.size, currency || "USD")}`;
       $("chPhase").textContent = phase.name + (prog.phases ? ` (${challenge.phase + 1}/${prog.phases.length})` : "");
@@ -852,7 +877,7 @@
     }
 
     function extractArray(res, keys) {
-      const roots = [res, res?.payload, res?.result, res?.data];
+      const roots = [res, res?.payload, res?.result, res?.data, res?.trader];
       for (const root of roots) {
         if (!root) continue;
         for (const k of keys) {
@@ -860,6 +885,26 @@
         }
       }
       return [];
+    }
+
+    function findDeals(obj, out = []) {
+      if (!obj || typeof obj !== "object") return out;
+      if (Array.isArray(obj)) {
+        if (obj.length && typeof obj[0] === "object" && (
+          obj[0].dealId != null || obj[0].DealId != null || obj[0].executionPrice != null ||
+          obj[0].closePositionDetail || obj[0].positionId != null
+        )) {
+          out.push(...obj);
+          return out;
+        }
+        for (const x of obj) findDeals(x, out);
+        return out;
+      }
+      for (const [k, v] of Object.entries(obj)) {
+        if (v && typeof v === "object" && /deal/i.test(k)) findDeals(v, out);
+      }
+      if (obj.payload) findDeals(obj.payload, out);
+      return out;
     }
 
     function ingestSymbols(res) {
@@ -872,48 +917,125 @@
     }
 
     function parseClosingDeal(d) {
-      const close = d.closePositionDetail || d.ClosePositionDetail || null;
-      if (!close) return null;
-      const digits = close.moneyDigits ?? d.moneyDigits ?? close.MoneyDigits ?? d.MoneyDigits ?? 2;
-      const gross = moneyInt(close.profit ?? close.grossProfit ?? close.Profit ?? 0, digits);
-      const swap = moneyInt(close.swap ?? close.Swap ?? 0, digits);
-      const commission = moneyInt(close.commission ?? close.Commission ?? d.commission ?? 0, digits);
-      const conv = moneyInt(close.pnlConversionFee ?? close.PnlConversionFee ?? 0, digits);
-      const net = gross + swap + commission + conv;
-      const ts = asMs(d.executionTimestamp || d.utcLastUpdateTimestamp || d.createTimestamp);
-      const offsets = d.offsetDeals || d.offsetDeal || [];
-      let openTs = 0;
-      if (Array.isArray(offsets)) {
-        for (const o of offsets) {
-          const t = asMs(o.executionTimestamp);
-          if (t && (!openTs || t < openTs)) openTs = t;
+      if (!d || typeof d !== "object") return null;
+      const close = d.closePositionDetail || d.ClosePositionDetail || d.close_position_detail || null;
+      const digits = close?.moneyDigits ?? d.moneyDigits ?? close?.MoneyDigits ?? d.MoneyDigits ?? 2;
+      const ts = asMs(d.executionTimestamp || d.utcLastUpdateTimestamp || d.createTimestamp || Date.now());
+      const symbolId = Number(d.symbolId ?? d.SymbolId ?? d.tradeData?.symbolId ?? 0);
+      const side = sideOf(d.tradeSide ?? d.TradeSide ?? d.tradeData?.tradeSide);
+      const entry = Number(close?.entryPrice ?? close?.EntryPrice ?? d.entryPrice ?? d.price ?? 0);
+      const exit = Number(d.executionPrice ?? d.ExecutionPrice ?? d.price ?? 0);
+      const lots = lotsOf(d, close || {});
+      const hasClose = !!(close && (close.profit != null || close.grossProfit != null || close.entryPrice != null || close.Profit != null));
+      if (hasClose) {
+        const gross = moneyInt(close.profit ?? close.grossProfit ?? close.Profit ?? 0, digits);
+        const swap = moneyInt(close.swap ?? close.Swap ?? 0, digits);
+        const commission = moneyInt(close.commission ?? close.Commission ?? d.commission ?? 0, digits);
+        const conv = moneyInt(close.pnlConversionFee ?? close.PnlConversionFee ?? 0, digits);
+        const offsets = d.offsetDeals || d.offsetDeal || [];
+        let openTs = 0;
+        if (Array.isArray(offsets)) {
+          for (const o of offsets) {
+            const t = asMs(o.executionTimestamp);
+            if (t && (!openTs || t < openTs)) openTs = t;
+          }
         }
+        return {
+          id: String(d.dealId ?? d.DealId ?? `${symbolId}-${ts}`),
+          positionId: d.positionId ?? d.PositionId,
+          symbolId, symbol: symbolNames.get(symbolId) || (symbolId ? `#${symbolId}` : "—"),
+          side, lots, entry, exit, net: gross + swap + commission + conv, gross, ts, openTs, open: false,
+        };
       }
-      const symbolId = Number(d.symbolId ?? d.SymbolId ?? 0);
       return {
-        id: d.dealId ?? d.DealId ?? `${symbolId}-${ts}`,
+        id: String(d.dealId ?? d.DealId ?? `open-${d.positionId || symbolId}-${ts}`),
         positionId: d.positionId ?? d.PositionId,
-        symbolId,
-        symbol: symbolNames.get(symbolId) || (symbolId ? `#${symbolId}` : "—"),
-        side: sideOf(d.tradeSide ?? d.TradeSide),
-        lots: lotsOf(d, close),
-        entry: Number(close.entryPrice ?? close.EntryPrice ?? 0),
-        exit: Number(d.executionPrice ?? d.ExecutionPrice ?? 0),
-        net,
-        gross,
-        ts,
-        openTs,
+        symbolId, symbol: symbolNames.get(symbolId) || (symbolId ? `#${symbolId}` : "—"),
+        side, lots, entry: entry || exit, exit: 0, net: 0, gross: 0, ts, openTs: ts, open: true,
+      };
+    }
+
+    function parsePosition(p) {
+      if (!p || typeof p !== "object") return null;
+      const td = p.tradeData || p.TradeData || p;
+      const status = String(p.positionStatus ?? p.status ?? p.PositionStatus ?? "OPEN").toUpperCase();
+      const closed = status.includes("CLOSED") || Number(td.volume ?? p.volume ?? 0) === 0;
+      const symbolId = Number(td.symbolId ?? p.symbolId ?? 0);
+      const ts = asMs(td.openTimestamp ?? p.utcLastUpdateTimestamp ?? Date.now());
+      const digits = p.moneyDigits ?? 2;
+      return {
+        id: String(p.positionId ?? p.PositionId ?? `pos-${symbolId}-${ts}`),
+        positionId: p.positionId ?? p.PositionId,
+        symbolId, symbol: symbolNames.get(symbolId) || (symbolId ? `#${symbolId}` : "—"),
+        side: sideOf(td.tradeSide ?? p.tradeSide),
+        lots: lotsOf(td, p),
+        entry: Number(p.price ?? p.entryPrice ?? td.price ?? 0),
+        exit: 0,
+        net: moneyInt(p.swap ?? 0, digits) + moneyInt(p.commission ?? 0, digits),
+        ts, openTs: ts, open: !closed,
       };
     }
 
     function extractTrades(res) {
-      const list = extractArray(res, ["deal", "deals", "Deal"]);
+      const list = findDeals(res);
+      const extra = extractArray(res, ["deal", "deals", "Deal"]);
+      const all = list.length ? list : extra;
       const out = [];
-      for (const d of list) {
+      for (const d of all) {
         const t = parseClosingDeal(d);
         if (t) out.push(t);
       }
       return out;
+    }
+
+    function upsert(list, item, idKey = "id") {
+      const id = String(item[idKey]);
+      const i = list.findIndex((x) => String(x[idKey]) === id);
+      if (i >= 0) list[i] = { ...list[i], ...item };
+      else list.push(item);
+    }
+
+    function contractSize(symbol) {
+      const s = (symbol || "").toUpperCase();
+      if (s.includes("XAU") || s.includes("GOLD")) return 100;
+      if (s.includes("XAG") || s.includes("SILVER")) return 5000;
+      if (/US30|US500|US100|NAS|GER|UK100|SPX/.test(s)) return 1;
+      return 100000;
+    }
+
+    function livePnl(pos) {
+      const q = quotes.get(Number(pos.symbolId));
+      if (!q || !pos.entry) return pos.net || 0;
+      const mark = pos.side === "BUY" ? q.bid : q.ask;
+      if (!mark) return pos.net || 0;
+      const diff = pos.side === "BUY" ? mark - pos.entry : pos.entry - mark;
+      return diff * pos.lots * contractSize(pos.symbol);
+    }
+
+    function quotePx(raw) {
+      const n = Number(raw);
+      if (!Number.isFinite(n) || n <= 0) return 0;
+      if (n > 1e6) return n / 100000;
+      return n;
+    }
+
+    async function ensureQuotes() {
+      if (!adapter || !connected) return;
+      const ids = [...new Set(openTrades.map((p) => Number(p.symbolId)).filter((id) => id && !quotedIds.has(id)))];
+      if (!ids.length) return;
+      try {
+        await once(subscribeQuotes(adapter, { symbolId: ids }));
+        ids.forEach((id) => quotedIds.add(id));
+      } catch (err) { console.warn(err); }
+    }
+
+    function splitParsed(batch) {
+      const closed = [], open = [];
+      for (const t of batch) {
+        if (t.open) open.push(t);
+        else closed.push(t);
+      }
+      return { closed, open };
     }
 
     async function loadDealHistory() {
@@ -928,27 +1050,55 @@
         }
       };
 
-      try {
-        const res = await once(getDealList(adapter, { fromTimestamp: 0, toTimestamp: Date.now() }));
-        add(extractTrades(res));
-        if (collected.length >= TRADE_LIMIT) return collected;
-      } catch (err) {
-        console.warn("wide deal list failed", err);
-      }
+      const j = loadJournal();
+      add(j.closed.filter((t) => !t.open));
 
       let to = Date.now();
-      for (let i = 0; i < 52 && collected.length < TRADE_LIMIT * 2; i++) {
+      for (let i = 0; i < 24 && collected.length < TRADE_LIMIT * 3; i++) {
         const from = to - WEEK_MS;
         try {
           const res = await once(getDealList(adapter, { fromTimestamp: from, toTimestamp: to }));
-          add(extractTrades(res));
+          const parsed = extractTrades(res);
+          const { closed, open } = splitParsed(parsed);
+          add(closed);
+          for (const p of open) upsert(openTrades, p);
+          const hasMore = !!(res?.hasMore ?? res?.payload?.hasMore);
+          if (hasMore && closed.length) {
+            to = Math.min(...closed.map((t) => t.ts)) - 1;
+          } else {
+            to = from;
+          }
         } catch (err) {
           console.warn("weekly deal list failed", err);
           break;
         }
-        to = from;
       }
       return collected;
+    }
+
+    function ingestExecution(ev) {
+      const root = ev?.payload || ev || {};
+      const deal = root.deal || root.Deal;
+      const pos = root.position || root.Position;
+      if (deal) {
+        const t = parseClosingDeal(deal);
+        if (t && !t.open) {
+          upsert(allTrades, t);
+          openTrades = openTrades.filter((p) => String(p.positionId) !== String(t.positionId));
+        } else if (t && t.open) {
+          upsert(openTrades, t);
+        }
+      }
+      if (pos) {
+        const p = parsePosition(pos);
+        if (p && p.open) upsert(openTrades, p);
+        else if (p) openTrades = openTrades.filter((x) => String(x.positionId) !== String(p.positionId));
+      }
+      allTrades.sort((a, b) => b.ts - a.ts);
+      trades = allTrades.filter((t) => !t.open).slice(0, TRADE_LIMIT);
+      saveJournal();
+      ensureQuotes();
+      render();
     }
 
     function statsOf(rows) {
@@ -1051,13 +1201,21 @@
     }
 
     function filteredTrades() {
-      return trades.filter((t) => {
+      if (listFilter === "open") {
+        return openTrades.map((p) => ({ ...p, net: livePnl(p), open: true }));
+      }
+      const closed = trades.filter((t) => {
         if (listFilter === "win") return t.net > 0;
         if (listFilter === "loss") return t.net < 0;
         if (listFilter === "buy") return t.side === "BUY";
         if (listFilter === "sell") return t.side === "SELL";
         return true;
       });
+      if (listFilter === "all") {
+        const live = openTrades.map((p) => ({ ...p, net: livePnl(p), open: true }));
+        return [...live, ...closed];
+      }
+      return closed;
     }
 
     function renderList() {
@@ -1072,14 +1230,15 @@
         const px = (t.entry && t.exit)
           ? `${t.entry.toPrecision(6)} → ${t.exit.toPrecision(6)}`
           : "";
-        const bits = [`${fmtLots(t.lots)} lot`, px, dur, fmtTime(t.ts)].filter(Boolean);
+        const bits = [`${fmtLots(t.lots)} lot`, px, dur, t.open ? "OPEN" : fmtTime(t.ts)].filter(Boolean);
         const cls = t.net > 0 ? "pos" : t.net < 0 ? "neg" : "";
+        const side = t.open ? "watch" : t.side.toLowerCase();
         return `<div class="trade">
           <div>
-            <div class="trade-sym">${escapeHtml(t.symbol)}<span class="side ${t.side.toLowerCase()}">${t.side}</span></div>
+            <div class="trade-sym">${escapeHtml(t.symbol)}<span class="side ${side}">${t.open ? "OPEN" : escapeHtml(t.side)}</span></div>
             <div class="trade-meta">${escapeHtml(bits.join(" · "))}</div>
           </div>
-          <div class="trade-pnl ${cls}">${t.net > 0 ? "+" : ""}${money(t.net, currency)}</div>
+          <div class="trade-pnl ${cls}">${t.open && !t.net ? "live" : `${t.net > 0 ? "+" : ""}${money(t.net, currency)}`}</div>
         </div>`;
       }).join("");
     }
@@ -1114,7 +1273,7 @@
         const floating = a.floating ?? ((a.equity ?? a.balance) - a.balance);
         $("floatPl").textContent = money(floating, currency);
         setPlClass($("floatPl"), floating);
-        $("openPos").textContent = a.openPositions != null ? String(a.openPositions) : "—";
+        $("openPos").textContent = String(openTrades.length || a.openPositions || 0);
       }
 
       const s = statsOf(trades);
@@ -1235,7 +1394,12 @@
         lastAccount = extractAccount(res);
         const root = lastAccount.raw || {};
         if (root.openPositionsCount != null) lastAccount.openPositions = Number(root.openPositionsCount);
-        if (Array.isArray(root.positions)) lastAccount.openPositions = root.positions.length;
+        const pos = extractArray(res, ["position", "positions", "openPosition"]);
+        for (const p of pos) {
+          const parsed = parsePosition(p);
+          if (parsed?.open) upsert(openTrades, parsed);
+        }
+        if (pos.length) lastAccount.openPositions = openTrades.length;
         render();
       } catch (err) {
         setConn(false, "Account read error");
@@ -1249,8 +1413,15 @@
       try {
         const all = await loadDealHistory();
         all.sort((a, b) => b.ts - a.ts);
-        allTrades = all;
-        trades = all.slice(0, TRADE_LIMIT);
+        const j = loadJournal();
+        const map = new Map();
+        for (const t of j.closed) if (t && !t.open) map.set(String(t.id), t);
+        for (const t of all) if (t && !t.open) map.set(String(t.id), t);
+        allTrades = [...map.values()].sort((a, b) => b.ts - a.ts);
+        trades = allTrades.slice(0, TRADE_LIMIT);
+        if (j.open.length && !openTrades.length) openTrades = j.open.filter((p) => p.open);
+        saveJournal();
+        await ensureQuotes();
         for (const t of trades) {
           if (symbolNames.has(t.symbolId)) t.symbol = symbolNames.get(t.symbolId);
         }
@@ -1297,10 +1468,23 @@
         } catch (err) {
           console.warn(err);
         }
+        const j0 = loadJournal();
+        if (j0.closed.length) {
+          allTrades = j0.closed.filter((t) => !t.open);
+          trades = allTrades.slice(0, TRADE_LIMIT);
+        }
+        if (j0.open.length) openTrades = j0.open.filter((p) => p.open);
         await refreshAll();
         setInterval(refreshAccount, 5000);
-        setInterval(refreshDeals, 20000);
-        executionEvent(adapter).pipe(tap(() => refreshAll())).subscribe();
+        setInterval(refreshDeals, 15000);
+        executionEvent(adapter).pipe(tap((ev) => { ingestExecution(ev); refreshAll(); })).subscribe();
+        quoteEvent(adapter).pipe(tap((q) => {
+          const root = q?.payload || q || {};
+          const id = Number(root.symbolId ?? root.SymbolId);
+          if (!id) return;
+          quotes.set(id, { bid: quotePx(root.bid), ask: quotePx(root.ask) });
+          if (!quotePaint) quotePaint = setTimeout(() => { quotePaint = null; render(); }, 400);
+        })).subscribe();
       }),
       catchError((err) => {
         connected = false;
@@ -1312,8 +1496,10 @@
           openPositions: 2,
         };
         currency = "USD";
-        trades = demoTrades();
+        const j0 = loadJournal();
+        trades = j0.closed.length ? j0.closed : demoTrades();
         allTrades = trades;
+        openTrades = j0.open || [];
         render();
         console.warn(err);
         return [];
