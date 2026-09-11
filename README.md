@@ -1,20 +1,16 @@
-# Last 50 Trades
+# Last 50 Trades — cTrader web plugin
 
-Account dashboard for cTrader WebView plugins (iPhone / Web / Desktop). Built around the last 50 closing deals.
+Simple live dashboard for the connected cTrader account.
+
+## What it shows
+- Balance, equity, floating P/L
+- Net P/L of the last 50 closes
+- Win rate and equity curve
+- Profit factor, Sharpe, profit recency, curve smoothness (R²)
+- Open fills and closed trade list
 
 ## Live URL
 https://kamani01.github.io/Dashboard/
 
-## What it shows
-- Balance / equity / floating P/L
-- Net P/L, expectancy, win rate
-- Profit factor, average win vs loss, best / worst
-- Long vs short P/L and equity curve
-- Filterable deal list (all / wins / losses / buys / sells)
-
-Open `index.html` in a browser for a 50-trade preview when not inside cTrader.
-
-## Signal Pulse (WebView)
-
-Open-feed sentiment list (time + direction):
-https://kamani01.github.io/Dashboard/signal.html
+## Install
+cTrader → Algo → Plugins → Create (Web) → paste the HTTPS URL → enable iPhone / desktop placements.
