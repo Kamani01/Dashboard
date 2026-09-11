@@ -187,11 +187,19 @@
     }
 
     .spark {
-      width: 100%; height: 88px; margin-top: 10px; display: block;
+      width: 100%; height: 110px; margin-top: 10px; display: block;
     }
+    .spark.tall { height: 128px; }
     .spark-zero { stroke: var(--muted); stroke-dasharray: 3 4; opacity: 0.45; }
-    .spark-line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+    .spark-line { fill: none; stroke-width: 2.2; stroke-linejoin: round; stroke-linecap: round; }
     .spark-fill { opacity: 0.16; }
+    .win-row { display: flex; align-items: center; gap: 16px; margin-top: 8px; }
+    .donut { width: 88px; height: 88px; flex: 0 0 auto; }
+    .win-big { font-size: 34px; font-weight: 800; letter-spacing: -0.04em; line-height: 1; }
+    .split-bar { height: 12px; border-radius: 999px; overflow: hidden; background: var(--track); display: flex; margin-top: 10px; }
+    .split-bar > i { display: block; height: 100%; }
+    .split-bar .lg { background: #34d399; }
+    .split-bar .sh { background: #fb7185; }
 
     .chips {
       display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px;
@@ -256,7 +264,7 @@
     body.place-asp_b .trades, body.place-so_eb .trades { max-height: 220px; }
     body.place-tw_t .shell { max-width: 980px; }
     body.place-tw_t .grid { grid-template-columns: repeat(4, 1fr); }
-    body.place-tw_t .card.wide { grid-column: span 2; }
+    body.place-tw_t .card.wide { grid-column: 1 / -1; }
     body.place-tw_t .trades { max-height: 420px; }
     @media (max-width: 520px) {
       body.place-tw_t .grid { grid-template-columns: 1fr 1fr; }
@@ -297,26 +305,49 @@
       </div>
 
       <div class="card wide">
-        <div class="progress-head">
+        <div class="label">Win rate</div>
+        <div class="win-row">
+          <svg id="winDonut" class="donut" viewBox="0 0 100 100" aria-hidden="true"></svg>
           <div>
-            <div class="label">Win rate</div>
-            <div id="winValue" class="value sm">—</div>
+            <div id="winPct" class="win-big">0%</div>
+            <div id="winValue" class="value sm" style="margin-top:6px">—</div>
+            <div class="hint" id="winLeft" style="margin-top:4px">Last 50 closed positions</div>
           </div>
-          <div id="winPct" class="pct-pill">0%</div>
         </div>
         <div class="bar winloss"><span class="win" id="winBar"></span><span class="loss" id="lossBar"></span></div>
-        <div class="row"><span id="winLeft">—</span><span id="sampleNote">Last 50 closing deals</span></div>
+        <div class="row"><span id="sampleNote">From this account’s history</span><span id="streak">Streak —</span></div>
       </div>
 
       <div class="card wide">
         <div class="progress-head">
           <div>
-            <div class="label">Equity curve (this sample)</div>
+            <div class="label">Equity curve</div>
             <div id="curveCaption" class="value sm">—</div>
           </div>
-          <div id="streak" class="pct-pill">Streak —</div>
+          <div class="pct-pill">Oldest → newest</div>
         </div>
-        <svg id="spark" class="spark" viewBox="0 0 320 72" preserveAspectRatio="none" aria-hidden="true"></svg>
+        <svg id="spark" class="spark tall" viewBox="0 0 320 110" preserveAspectRatio="none" aria-hidden="true"></svg>
+      </div>
+
+      <div class="card wide">
+        <div class="progress-head">
+          <div>
+            <div class="label">P/L per trade</div>
+            <div class="hint" style="margin-top:4px">Green win · red loss</div>
+          </div>
+        </div>
+        <svg id="pnlBars" class="spark" viewBox="0 0 320 110" preserveAspectRatio="none" aria-hidden="true"></svg>
+      </div>
+
+      <div class="card wide">
+        <div class="progress-head">
+          <div>
+            <div class="label">Long vs short</div>
+            <div id="lsCaption" class="value sm">—</div>
+          </div>
+        </div>
+        <div class="split-bar"><i class="lg" id="longBar"></i><i class="sh" id="shortBar"></i></div>
+        <div class="row"><span id="longHint">Long —</span><span id="shortHint">Short —</span></div>
       </div>
 
       <div class="card metric">
@@ -516,24 +547,39 @@
       return res;
     }
 
+    function moneyField(obj, names, digits) {
+      if (!obj) return null;
+      for (const n of names) {
+        if (obj[n] != null && obj[n] !== "") {
+          const v = moneyInt(obj[n], digits);
+          if (Number.isFinite(v)) return v;
+        }
+      }
+      return null;
+    }
+
     function extractAccount(res) {
       const t = findTrader(res);
-      const digits = Number(t.moneyDigits ?? t.MoneyDigits ?? 2);
-      const bal = moneyInt(t.balance ?? t.Balance, digits);
-      const eqRaw = t.equity ?? t.Equity;
-      const eq = eqRaw != null && eqRaw !== "" ? moneyInt(eqRaw, digits) : bal;
-      const freeMargin = t.freeMargin ?? t.FreeMargin;
-      const fm = freeMargin != null ? moneyInt(freeMargin, digits) : null;
-      const unrealized = t.unrealizedNetProfit ?? t.UnrealizedNetProfit ?? t.netUnrealizedPnL;
-      const un = unrealized != null ? moneyInt(unrealized, digits) : (Number.isFinite(eq) && Number.isFinite(bal) ? eq - bal : null);
+      const wrap = res?.payload || res || {};
+      const digits = Number(t.moneyDigits ?? t.MoneyDigits ?? wrap.moneyDigits ?? 2);
+      const namesBal = ["balance", "Balance"];
+      const namesEq = ["equity", "Equity", "cashEquity", "CashEquity"];
+      const namesUn = ["unrealizedNetProfit", "UnrealizedNetProfit", "unrealizedGrossProfit", "netUnrealizedPnL", "unrealizedPnl", "unrealizedPnL"];
+      const bal = moneyField(t, namesBal, digits) ?? moneyField(wrap, namesBal, digits);
+      let eq = moneyField(t, namesEq, digits) ?? moneyField(wrap, namesEq, digits);
+      let un = moneyField(t, namesUn, digits) ?? moneyField(wrap, namesUn, digits);
+      if (un == null && eq != null && bal != null) un = eq - bal;
+      if (eq == null && bal != null && un != null) eq = bal + un;
+      if (un != null && bal != null && Math.abs(un - bal) < 1e-6 && Math.abs(bal) > 1) un = eq != null ? eq - bal : 0;
       const login = t.traderLogin ?? t.login ?? t.Login ?? t.accountNumber ?? "";
       const accountId = String(t.ctidTraderAccountId ?? t.CtidTraderAccountId ?? login ?? "");
       const liveFlag = t.isLive ?? t.live ?? t.Live;
       const live = liveFlag === true || liveFlag === "true" || String(t.environment || "").toLowerCase() === "live";
+      const fm = moneyField(t, ["freeMargin", "FreeMargin"], digits);
       return {
         balance: Number.isFinite(bal) ? bal : null,
         equity: Number.isFinite(eq) ? eq : null,
-        freeMargin: Number.isFinite(fm) ? fm : null,
+        freeMargin: fm,
         floating: Number.isFinite(un) ? un : null,
         login: login ? String(login) : "",
         accountId,
@@ -874,12 +920,9 @@
 
     function sparkPath(rows) {
       const svg = $("spark");
-      const W = 320, H = 72, pad = 4;
-      if (!rows.length) {
-        svg.innerHTML = "";
-        return;
-      }
-      const chrono = [...rows].reverse();
+      const W = 320, H = 110, pad = 6;
+      if (!rows.length) { svg.innerHTML = ""; return; }
+      const chrono = [...rows].sort((a, b) => a.ts - b.ts);
       let run = 0;
       const pts = chrono.map((t) => { run += t.net; return run; });
       const min = Math.min(0, ...pts);
@@ -890,12 +933,40 @@
       const zeroY = y(0);
       const d = pts.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
       const fill = `${d} L${x(pts.length - 1).toFixed(1)},${zeroY.toFixed(1)} L${x(0).toFixed(1)},${zeroY.toFixed(1)} Z`;
-      const up = pts[pts.length - 1] >= 0;
-      const color = up ? "var(--good)" : "var(--bad)";
+      const color = pts[pts.length - 1] >= 0 ? "var(--good)" : "var(--bad)";
       svg.innerHTML =
         `<line class="spark-zero" x1="${pad}" x2="${W - pad}" y1="${zeroY.toFixed(1)}" y2="${zeroY.toFixed(1)}" />` +
         `<path class="spark-fill" d="${fill}" fill="${color}"></path>` +
         `<path class="spark-line" d="${d}" stroke="${color}"></path>`;
+    }
+
+    function drawDonut(pct) {
+      const el = $("winDonut");
+      const r = 34, c = 2 * Math.PI * r;
+      const win = Math.max(0, Math.min(1, pct || 0));
+      const dash = `${(win * c).toFixed(2)} ${c.toFixed(2)}`;
+      el.innerHTML =
+        `<circle cx="50" cy="50" r="${r}" fill="none" stroke="var(--track)" stroke-width="11"/>` +
+        `<circle cx="50" cy="50" r="${r}" fill="none" stroke="var(--good)" stroke-width="11" stroke-linecap="round"` +
+        ` stroke-dasharray="${dash}" transform="rotate(-90 50 50)"/>`;
+    }
+
+    function drawPnlBars(rows) {
+      const el = $("pnlBars");
+      if (!el) return;
+      const chrono = [...rows].sort((a, b) => a.ts - b.ts);
+      const W = 320, H = 110, pad = 6;
+      if (!chrono.length) { el.innerHTML = ""; return; }
+      const max = Math.max(...chrono.map((t) => Math.abs(t.net)), 1);
+      const bw = (W - pad * 2) / chrono.length;
+      const zero = H / 2;
+      const rects = chrono.map((t, i) => {
+        const bh = (Math.abs(t.net) / max) * (H / 2 - 8);
+        const y = t.net >= 0 ? zero - bh : zero;
+        const fill = t.net >= 0 ? "var(--good)" : "var(--bad)";
+        return `<rect x="${(pad + i * bw).toFixed(2)}" y="${y.toFixed(2)}" width="${Math.max(1.2, bw - 0.8).toFixed(2)}" height="${Math.max(0.5, bh).toFixed(2)}" fill="${fill}" rx="1"/>`;
+      }).join("");
+      el.innerHTML = `<line class="spark-zero" x1="${pad}" x2="${W - pad}" y1="${zero}" y2="${zero}"/>` + rects;
     }
 
     function filteredTrades() {
@@ -963,9 +1034,15 @@
       const a = lastAccount;
       if (a) applyAccountIdentity(a);
       if (a && a.balance != null) {
+        const liveFloat = openTrades.reduce((sum, p) => sum + livePnl(p), 0);
+        const quoted = openTrades.some((p) => quotes.has(Number(p.symbolId)));
+        let floating = quoted ? liveFloat : (a.floating != null ? a.floating : liveFloat);
+        if (floating == null) floating = 0;
+        const equity = (a.equity != null && Math.abs(a.equity - a.balance) > 0.009)
+          ? a.equity
+          : a.balance + floating;
         $("balance").textContent = money(a.balance, currency);
-        $("equity").textContent = money(a.equity ?? a.balance, currency);
-        const floating = a.floating ?? ((a.equity ?? a.balance) - a.balance);
+        $("equity").textContent = money(equity, currency);
         $("floatPl").textContent = money(floating, currency);
         setPlClass($("floatPl"), floating);
         $("openPos").textContent = String(openTrades.length || a.openPositions || 0);
@@ -977,9 +1054,11 @@
 
       $("winValue").textContent = s.n ? `${s.wins}W · ${s.losses}L${s.even ? ` · ${s.even}E` : ""}` : "—";
       $("winPct").textContent = s.n ? `${(s.winRate * 100).toFixed(0)}%` : "0%";
+      $("winPct").className = "win-big" + (s.winRate >= 0.5 ? " pos" : s.n ? " neg" : "");
+      drawDonut(s.winRate || 0);
       $("winBar").style.width = `${(s.winRate * 100).toFixed(1)}%`;
       $("lossBar").style.width = s.n ? `${((s.losses / s.n) * 100).toFixed(1)}%` : "0%";
-      $("winLeft").textContent = s.n ? `${s.n} of last ${TRADE_LIMIT}` : "No trades yet";
+      $("winLeft").textContent = s.n ? `${s.n} of last ${TRADE_LIMIT} closed` : "No closed trades yet";
       $("sampleNote").textContent = s.n < TRADE_LIMIT ? `${s.n} closed positions from history` : `Last ${TRADE_LIMIT} closed positions`;
 
       $("curveCaption").textContent = s.n ? money(s.net, currency) : "—";
@@ -1023,6 +1102,13 @@
           : (s.r2 >= 0.7 ? "Smooth downtrend" : "Choppy / no clear line");
       }
       sparkPath(trades);
+      drawPnlBars(trades);
+      const absL = Math.abs(s.longPl || 0), absS = Math.abs(s.shortPl || 0), absT = absL + absS || 1;
+      $("longBar").style.width = `${(absL / absT) * 100}%`;
+      $("shortBar").style.width = `${(absS / absT) * 100}%`;
+      $("lsCaption").textContent = s.n ? `${money(s.longPl, currency)} / ${money(s.shortPl, currency)}` : "—";
+      $("longHint").textContent = `Long ${money(s.longPl, currency)}`;
+      $("shortHint").textContent = `Short ${money(s.shortPl, currency)}`;
       $("listCaption").textContent = `${filteredTrades().length} shown`;
       renderList();
 
