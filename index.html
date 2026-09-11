@@ -291,6 +291,7 @@
         <h1>Last 50 trades</h1>
         <div class="sub">Challenge rules on future closes · last-50 stats</div>
         <div id="conn" class="conn"><span class="dot off" id="connDot"></span><span id="connText">Connecting…</span></div>
+        <div class="sub" id="acctLine">Account: —</div>
       </div>
       <div id="status" class="badge">WAITING</div>
     </div>
@@ -469,6 +470,7 @@
     import { createClientAdapter } from "https://esm.sh/@spotware-web-team/sdk-external-api@0.0.5";
     import {
       getAccountInformation,
+      getAccountGroupInformation,
       getDealList,
       getLightSymbolList,
       executionEvent,
@@ -569,18 +571,21 @@
     let quotePaint = null;
     let listFilter = "all";
     let loadingDeals = false;
-    const JOURNAL_KEY = "dashTradeJournal";
-
+    let accountKey = "";
+    function journalKey() {
+      return "dashTradeJournal:" + (accountKey || "unknown");
+    }
     function loadJournal() {
       try {
-        const raw = JSON.parse(localStorage.getItem(JOURNAL_KEY) || "{}");
+        const raw = JSON.parse(localStorage.getItem(journalKey()) || "{}");
         return { closed: Array.isArray(raw.closed) ? raw.closed : [], open: Array.isArray(raw.open) ? raw.open : [] };
       } catch { return { closed: [], open: [] }; }
     }
     function saveJournal() {
+      if (!accountKey) return;
       const closed = allTrades.slice(0, 200);
       const open = openTrades.slice(0, 50);
-      localStorage.setItem(JOURNAL_KEY, JSON.stringify({ closed, open }));
+      localStorage.setItem(journalKey(), JSON.stringify({ closed, open }));
     }
 
     const SIZES = [7500, 12500, 25000, 50000, 100000];
@@ -854,26 +859,68 @@
       return fallback;
     }
 
+    function findTrader(res) {
+      if (!res || typeof res !== "object") return {};
+      if (res.trader && typeof res.trader === "object") return res.trader;
+      if (res.payload?.trader) return res.payload.trader;
+      if (res.Trader) return res.Trader;
+      if (res.payload?.Trader) return res.payload.Trader;
+      if (res.ctidTraderAccountId != null || res.traderLogin != null || res.login != null) return res;
+      if (res.payload && (res.payload.balance != null || res.payload.ctidTraderAccountId != null)) return res.payload;
+      return res;
+    }
+
     function extractAccount(res) {
-      const root = res?.payload || res?.account || res || {};
-      const balance = pick(root, ["balance", "Balance", "balanceInCents"], NaN);
-      const equity = pick(root, ["equity", "Equity", "equityInCents"], NaN);
-      const digits = Number(root.moneyDigits ?? root.MoneyDigits ?? 2);
-      const balRaw = Number(balance);
-      const eqRaw = Number(equity);
-      const bal = Number.isFinite(balRaw) ? (Math.abs(balRaw) > 1e7 ? moneyInt(balRaw, digits > 2 ? digits : 2) : balRaw) : NaN;
-      const eq = Number.isFinite(eqRaw) ? (Math.abs(eqRaw) > 1e7 ? moneyInt(eqRaw, digits > 2 ? digits : 2) : eqRaw) : NaN;
-      currency = root.depositAsset || root.currency || root.Currency || currency || "";
-      const freeMargin = pick(root, ["freeMargin", "FreeMargin", "freeMarginInCents"], NaN);
-      const fm = Number.isFinite(freeMargin) && Math.abs(freeMargin) > 1e7 ? moneyInt(freeMargin, digits) : freeMargin;
-      const unrealized = pick(root, ["unrealizedNetProfit", "UnrealizedNetProfit", "netUnrealizedPnL"], NaN);
+      const t = findTrader(res);
+      const digits = Number(t.moneyDigits ?? t.MoneyDigits ?? 2);
+      const bal = moneyInt(t.balance ?? t.Balance, digits);
+      const eqRaw = t.equity ?? t.Equity;
+      const eq = eqRaw != null && eqRaw !== "" ? moneyInt(eqRaw, digits) : bal;
+      const freeMargin = t.freeMargin ?? t.FreeMargin;
+      const fm = freeMargin != null ? moneyInt(freeMargin, digits) : null;
+      const unrealized = t.unrealizedNetProfit ?? t.UnrealizedNetProfit ?? t.netUnrealizedPnL;
+      const un = unrealized != null ? moneyInt(unrealized, digits) : (Number.isFinite(eq) && Number.isFinite(bal) ? eq - bal : null);
+      const login = t.traderLogin ?? t.login ?? t.Login ?? t.accountNumber ?? "";
+      const accountId = String(t.ctidTraderAccountId ?? t.CtidTraderAccountId ?? login ?? "");
+      const liveFlag = t.isLive ?? t.live ?? t.Live;
+      const live = liveFlag === true || liveFlag === "true" || String(t.environment || "").toLowerCase() === "live";
       return {
         balance: Number.isFinite(bal) ? bal : null,
         equity: Number.isFinite(eq) ? eq : null,
         freeMargin: Number.isFinite(fm) ? fm : null,
-        floating: Number.isFinite(unrealized) ? unrealized : (Number.isFinite(eq) && Number.isFinite(bal) ? eq - bal : null),
-        raw: root,
+        floating: Number.isFinite(un) ? un : null,
+        login: login ? String(login) : "",
+        accountId,
+        broker: t.brokerName ?? t.broker ?? "",
+        live,
+        digits,
+        raw: t,
       };
+    }
+
+    function applyAccountIdentity(acc) {
+      const next = String(acc.accountId || acc.login || "");
+      if (next && next !== accountKey) {
+        accountKey = next;
+        allTrades = [];
+        trades = [];
+        openTrades = [];
+        quotedIds = new Set();
+        quotes = new Map();
+        const j = loadJournal();
+        allTrades = j.closed.filter((x) => !x.open);
+        trades = allTrades.slice(0, TRADE_LIMIT);
+        openTrades = j.open.filter((p) => p.open);
+      } else if (!accountKey && next) {
+        accountKey = next;
+      }
+      const bits = [
+        acc.login ? `#${acc.login}` : (acc.accountId ? `id ${acc.accountId}` : null),
+        acc.live ? "LIVE" : "DEMO",
+        acc.broker || null,
+        currency || null,
+      ].filter(Boolean);
+      $("acctLine").textContent = bits.length ? `Account ${bits.join(" · ")}` : "Account: waiting for host";
     }
 
     function extractArray(res, keys) {
@@ -1267,6 +1314,7 @@
 
     function render() {
       const a = lastAccount;
+      if (a) applyAccountIdentity(a);
       if (a && a.balance != null) {
         $("balance").textContent = money(a.balance, currency);
         $("equity").textContent = money(a.equity ?? a.balance, currency);
@@ -1392,6 +1440,17 @@
       try {
         const res = await once(getAccountInformation(adapter, {}));
         lastAccount = extractAccount(res);
+        const prevKey = accountKey;
+        applyAccountIdentity(lastAccount);
+        try {
+          const grp = await once(getAccountGroupInformation(adapter, {}));
+          const g = grp?.payload || grp || {};
+          currency = g.depositCurrency || g.depositAsset || lastAccount.raw?.depositCurrency || currency;
+          applyAccountIdentity(lastAccount);
+        } catch {}
+        if (prevKey && accountKey && prevKey !== accountKey) {
+          await refreshDeals();
+        }
         const root = lastAccount.raw || {};
         if (root.openPositionsCount != null) lastAccount.openPositions = Number(root.openPositionsCount);
         const pos = extractArray(res, ["position", "positions", "openPosition"]);
