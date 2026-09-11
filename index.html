@@ -325,7 +325,7 @@
       <div class="card wide">
         <div class="progress-head">
           <div>
-            <div class="label">Equity curve</div>
+            <div class="label">Last 50 net P/L curve</div>
             <div id="curveCaption" class="value sm">—</div>
           </div>
           <div class="pct-pill">Oldest → newest</div>
@@ -579,17 +579,22 @@
       let equity = pick(t, ["equity", "Equity", "equityInCents"], NaN);
       if (!Number.isFinite(equity)) equity = pick(root, ["equity", "Equity", "equityInCents"], NaN);
       const digits = Number(root.moneyDigits ?? root.MoneyDigits ?? t.moneyDigits ?? 2);
-      const balRaw = Number(balance);
-      const eqRaw = Number(equity);
-      const bal = Number.isFinite(balRaw) ? (Math.abs(balRaw) > 1e7 ? moneyInt(balRaw, digits > 2 ? digits : 2) : balRaw) : NaN;
-      const eq = Number.isFinite(eqRaw) ? (Math.abs(eqRaw) > 1e7 ? moneyInt(eqRaw, digits > 2 ? digits : 2) : eqRaw) : NaN;
+      const scale = (v) => {
+        const n = Number(v);
+        if (!Number.isFinite(n)) return NaN;
+        const d = Number.isFinite(digits) && digits > 0 && digits <= 12 ? digits : 2;
+        if (!Number.isInteger(n)) return n;
+        return n / (10 ** d);
+      };
+      const bal = scale(balance);
+      const eq = scale(equity);
       currency = root.depositAsset || root.currency || root.Currency || t.depositCurrency || currency || "";
-      const freeMargin = pick(root, ["freeMargin", "FreeMargin", "freeMarginInCents"], NaN);
-      const fm = Number.isFinite(freeMargin) && Math.abs(freeMargin) > 1e7 ? moneyInt(freeMargin, digits) : freeMargin;
-      const unrealized = pick(root, ["unrealizedNetProfit", "UnrealizedNetProfit", "netUnrealizedPnL"], NaN);
-      const un = Number.isFinite(unrealized)
-        ? (Math.abs(unrealized) > 1e7 ? moneyInt(unrealized, digits) : unrealized)
-        : (Number.isFinite(eq) && Number.isFinite(bal) ? eq - bal : null);
+      const freeMargin = pick(t, ["freeMargin", "FreeMargin", "freeMarginInCents"], NaN);
+      const fm = scale(Number.isFinite(freeMargin) ? freeMargin : pick(root, ["freeMargin", "FreeMargin", "freeMarginInCents"], NaN));
+      let unrealized = pick(t, ["unrealizedNetProfit", "UnrealizedNetProfit", "netUnrealizedPnL"], NaN);
+      if (!Number.isFinite(unrealized)) unrealized = pick(root, ["unrealizedNetProfit", "UnrealizedNetProfit", "netUnrealizedPnL"], NaN);
+      let un = Number.isFinite(unrealized) ? scale(unrealized) : NaN;
+      if (!Number.isFinite(un) && Number.isFinite(eq) && Number.isFinite(bal)) un = eq - bal;
       const login = t.traderLogin ?? root.traderLogin ?? root.login ?? t.login ?? "";
       const accountId = String(t.ctidTraderAccountId ?? root.ctidTraderAccountId ?? login ?? "");
       const liveFlag = t.isLive ?? root.isLive;
