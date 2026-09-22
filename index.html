@@ -379,9 +379,27 @@
         <svg id="ddChart" class="spark" viewBox="0 0 360 140" preserveAspectRatio="none" aria-hidden="true"></svg>
       </div>
 
+      <div class="card wide">
+        <div class="progress-head">
+          <div>
+            <div class="label">Win likelihood</div>
+            <div id="likeTitle" class="value sm">—</div>
+          </div>
+          <div id="likePct" class="pct-pill">—</div>
+        </div>
+        <div class="hint" id="likeLast" style="margin-top:8px">—</div>
+        <div class="hint" id="likeDay">—</div>
+        <div class="hint" id="likeHour">—</div>
+      </div>
+
       <div class="card metric">
         <div class="label">Profit factor</div>
         <div id="pf" class="value sm">—</div>
+      </div>
+      <div class="card metric">
+        <div class="label">SQN</div>
+        <div id="sqn" class="value sm">—</div>
+        <div class="hint" id="sqnHint">Van Tharp · &gt;2.5 good · &gt;3 excellent</div>
       </div>
       <div class="card metric">
         <div class="label">Open</div>
@@ -964,6 +982,13 @@
       }
       const pf = lossSum < 0 ? winSum / Math.abs(lossSum) : (winSum > 0 ? Infinity : 0);
       const extra = curveQuality(rows);
+      const avgLossAbs = losses ? Math.abs(lossSum / losses) : 0;
+      const Rs = rows.map((t) => (avgLossAbs > 1e-9 ? t.net / avgLossAbs : t.net));
+      const meanR = n ? Rs.reduce((a, b) => a + b, 0) / n : 0;
+      let varR = 0;
+      for (const r of Rs) varR += (r - meanR) ** 2;
+      const stdR = n > 1 ? Math.sqrt(varR / (n - 1)) : 0;
+      const sqn = n < 3 ? null : (stdR > 1e-12 ? (meanR / stdR) * Math.sqrt(n) : (meanR > 0 ? Infinity : 0));
       return {
         n, net, wins, losses, even,
         winRate: n ? wins / n : 0,
@@ -971,7 +996,38 @@
         avgLoss: losses ? lossSum / losses : 0,
         pf, best, worst, longPl, shortPl, streak, streakKind,
         expectancy: n ? net / n : 0,
+        sqn,
         ...extra,
+      };
+    }
+
+    function winLikelihood(rows) {
+      const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+      const now = new Date();
+      const dow = now.getDay();
+      const hour = now.getHours();
+      const dated = rows.filter((t) => t.ts > 1e11);
+      const sameDay = dated.filter((t) => new Date(t.ts).getDay() === dow);
+      const dayWins = sameDay.filter((t) => t.net > 0).length;
+      const weekAgo = Date.now() - 8 * 86400000;
+      const lastWeekSame = sameDay.filter((t) => t.ts >= weekAgo).sort((a, b) => b.ts - a.ts)[0] || null;
+      const hourBand = sameDay.filter((t) => {
+        const h = new Date(t.ts).getHours();
+        const d = Math.min(Math.abs(h - hour), 24 - Math.abs(h - hour));
+        return d <= 2;
+      });
+      const hourWins = hourBand.filter((t) => t.net > 0).length;
+      return {
+        dayName: days[dow],
+        hour,
+        last: lastWeekSame,
+        dayWins,
+        dayN: sameDay.length,
+        dayRate: sameDay.length ? dayWins / sameDay.length : null,
+        hourWins,
+        hourN: hourBand.length,
+        hourRate: hourBand.length ? hourWins / hourBand.length : null,
+        dated: dated.length,
       };
     }
 
@@ -1326,6 +1382,42 @@
         : "Streak —";
 
       $("pf").textContent = !s.n ? "—" : !Number.isFinite(s.pf) ? "∞" : s.pf.toFixed(2);
+
+      const like = winLikelihood(trades);
+      $("likeTitle").textContent = like.dayName;
+      if (like.dayRate == null) {
+        $("likePct").textContent = "—";
+        $("likePct").className = "pct-pill";
+        $("likeLast").textContent = like.dated ? "No closes on this weekday in the last 50." : "Need close dates to score weekdays.";
+        $("likeDay").textContent = "";
+        $("likeHour").textContent = "";
+      } else {
+        const pct = Math.round(like.dayRate * 100);
+        $("likePct").textContent = `${pct}% likely`;
+        $("likePct").className = "pct-pill" + (pct >= 55 ? " ok" : pct >= 45 ? " warn" : " bad");
+        if (like.last) {
+          $("likeLast").textContent = like.last.net > 0
+            ? `Last ${like.dayName}: win (${money(like.last.net, currency)}). ${like.dayWins} of ${like.dayN} ${like.dayName}s were wins.`
+            : `Last ${like.dayName}: loss (${money(like.last.net, currency)}). ${like.dayWins} of ${like.dayN} ${like.dayName}s were wins.`;
+        } else {
+          $("likeLast").textContent = `No close in the last week on ${like.dayName}. ${like.dayWins} of ${like.dayN} ${like.dayName}s in this sample were wins.`;
+        }
+        $("likeDay").textContent = `${like.dayName}s in last 50: ${like.dayWins}W / ${like.dayN} (${pct}%)`;
+        $("likeHour").textContent = like.hourN
+          ? `${like.dayName} around ${String(like.hour).padStart(2, "0")}:00 (±2h): ${like.hourWins}W / ${like.hourN} (${Math.round(like.hourRate * 100)}%)`
+          : `No ${like.dayName} closes near ${String(like.hour).padStart(2, "0")}:00 in this sample.`;
+        setPlClass($("likeTitle"), like.dayRate >= 0.5 ? 1 : -1);
+      }
+
+      if (s.sqn == null) {
+        $("sqn").textContent = "—";
+        $("sqn").classList.remove("pos", "neg");
+        $("sqnHint").textContent = "Need at least 3 closes";
+      } else {
+        $("sqn").textContent = Number.isFinite(s.sqn) ? s.sqn.toFixed(2) : "∞";
+        setPlClass($("sqn"), s.sqn >= 2.5 ? 1 : s.sqn < 1 ? -1 : 0);
+        $("sqnHint").textContent = s.sqn >= 3 ? "Excellent (Van Tharp)" : s.sqn >= 2.5 ? "Good — tradeable" : s.sqn >= 1.6 ? "Average" : "Poor / noisy";
+      }
       if (s.maxDd == null) {
         $("maxDd").textContent = "—";
         $("maxDd").classList.remove("pos", "neg");
