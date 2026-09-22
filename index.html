@@ -284,7 +284,7 @@
       <div class="hero-left">
         <div class="kicker">Account</div>
         <h1>Last 50 trades</h1>
-        <div class="sub">Live closes · open fills · simple stats</div>
+        <div class="sub">Last 50 closed trades · simple stats</div>
         <div id="conn" class="conn"><span class="dot off" id="connDot"></span><span id="connText">Connecting…</span></div>
         <div class="sub" id="acctLine">Account: —</div>
       </div>
@@ -402,10 +402,6 @@
         <div class="hint" id="sqnHint">Van Tharp · &gt;2.5 good · &gt;3 excellent</div>
       </div>
       <div class="card metric">
-        <div class="label">Open</div>
-        <div id="openPos" class="value sm">—</div>
-      </div>
-      <div class="card metric">
         <div class="label">Max drawdown</div>
         <div id="maxDd" class="value sm">—</div>
         <div class="hint" id="maxDdHint">Peak to trough on this 50</div>
@@ -435,7 +431,6 @@
         </div>
         <div class="chips" id="chips">
           <button class="chip on" data-filter="all" type="button">All</button>
-          <button class="chip" data-filter="open" type="button">Open</button>
           <button class="chip" data-filter="win" type="button">Wins</button>
           <button class="chip" data-filter="loss" type="button">Losses</button>
           <button class="chip" data-filter="buy" type="button">Buys</button>
@@ -443,7 +438,7 @@
         </div>
         <div class="trades" id="trades"></div>
         <div class="hint">
-          Closed positions from this account’s cTrader history (same as the History tab). Open shows live fills only.
+          Closed positions from this account’s cTrader history (same as the History tab).
         </div>
       </div>
     </div>
@@ -1289,9 +1284,6 @@
     }
 
     function filteredTrades() {
-      if (listFilter === "open") {
-        return openTrades.map((p) => ({ ...p, net: livePnl(p), open: true }));
-      }
       const closed = trades.filter((t) => {
         if (listFilter === "win") return t.net > 0;
         if (listFilter === "loss") return t.net < 0;
@@ -1314,18 +1306,18 @@
         const px = (t.entry && t.exit)
           ? `${fmtPx(t.entry)} → ${fmtPx(t.exit)}`
           : (t.entry ? fmtPx(t.entry) : "");
-        const when = t.open ? "OPEN" : (fmtTime(t.ts) || fmtTime(t.openTs) || "");
+        const when = fmtTime(t.ts) || fmtTime(t.openTs) || "";
         const lotTxt = fmtLots(t.lots);
         const bits = [lotTxt !== "—" ? `${lotTxt} lot` : null, px, dur, when || null].filter(Boolean);
         const cls = t.net > 0 ? "pos" : t.net < 0 ? "neg" : "";
-        const side = t.open ? "watch" : t.side.toLowerCase();
+        const side = (t.side || "").toLowerCase();
         return `<div class="trade">
           <div>
-            <div class="trade-sym">${escapeHtml(t.symbol)}<span class="side ${side}">${t.open ? "OPEN" : escapeHtml(t.side)}</span></div>
+            <div class="trade-sym">${escapeHtml(t.symbol)}<span class="side ${side}">${escapeHtml(t.side)}</span></div>
             ${when ? `<div class="trade-date">${escapeHtml(when)}</div>` : ""}
             <div class="trade-meta">${escapeHtml(bits.join(" · ") || " ")}</div>
           </div>
-          <div class="trade-pnl ${cls}">${t.open && !t.net ? "live" : `${t.net > 0 ? "+" : ""}${money(t.net, currency)}`}</div>
+          <div class="trade-pnl ${cls}">${t.net > 0 ? "+" : ""}${money(t.net, currency)}</div>
         </div>`;
       }).join("");
     }
@@ -1358,7 +1350,6 @@
       if (a && a.balance != null) {
         $("balance").textContent = money(a.balance, currency);
         $("equity").textContent = money(a.equity ?? a.balance, currency);
-        $("openPos").textContent = String(openTrades.length || a.openPositions || 0);
       }
 
       const s = statsOf(trades);
